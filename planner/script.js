@@ -195,7 +195,31 @@ function saveLocal() {
   localStorage.setItem('mp2_schedules', JSON.stringify(schedules));
   localStorage.setItem('mp2_posts',     JSON.stringify(posts));
   localStorage.setItem('mp2_opponents', JSON.stringify(opponents));
+  scheduleCloudSave();
 }
+
+let _cloudSaveTimer = null;
+function scheduleCloudSave() {
+  const s = getSettings();
+  if (!isCloudConfigured(s)) return;
+  clearTimeout(_cloudSaveTimer);
+  _cloudSaveTimer = setTimeout(async () => {
+    try {
+      setSyncIcon('💾');
+      const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSyncIcon('☁️');
+      setSyncTime();
+    } catch(e) {
+      setSyncIcon('⚠️');
+    }
+  }, 3000);
+}
+
 function saveCurrentMatch() {
   if (!currentMatch) return;
   const idx = matches.findIndex(m => m.id === currentMatch.id);

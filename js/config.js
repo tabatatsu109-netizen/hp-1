@@ -2,24 +2,24 @@
 // Firebase の公開読み取りを使うため、シークレットは不要。
 
 const HP_CONFIG = {
-  clubName: 'GRANDE FC',
-  clubNameFull: '八ヶ岳北社グランデフットボールクラブ',
-  firebaseUrl: 'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app',
-  clubId:      'grande-fc',
+  clubName:     'ALASERIO',
+  clubNameFull: 'FC ALASERIO',
+  firebaseUrl:  'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app',
+  clubId:       'alaserio',
 
-  primaryColor: '#1a5c2a',
-  accentColor:  '#c9a227',
-  logoUrl: '',
+  primaryColor: '#f05a22',
+  accentColor:  '#ffffff',
+  logoUrl:      '',
 
-  categories: ['ジュニアユース', 'ジュニア'],
+  categories: ['U15'],
 
   contactEmail: '',
   contactLine:  '',
-  instagram:    '',
+  instagram:    'alaserio_2019',
   twitter:      '',
   joinUrl:      '',
   joinLabel:    '体験申込はこちら',
 
-  heroTitle:    '勝利への情熱を、<br>グラウンドで。',
-  heroSub:      '八ヶ岳北社グランデフットボールクラブ — U8〜U15',
+  heroTitle: '常に本気、<br>全力であれ。',
+  heroSub:   'FC ALASERIO — U15',
 };

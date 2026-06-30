@@ -219,6 +219,7 @@ async function loadFromCloud() {
     if (r.opponents) opponents = r.opponents;
     saveLocal();
     setSyncIcon('☁️');
+    setSyncTime();
     showToast('クラウドから読み込みました', 'success');
     renderCurrentPage();
   } catch(e) {
@@ -245,6 +246,30 @@ async function saveToCloud() {
   }
 }
 function setSyncIcon(icon) { document.getElementById('sync-icon').textContent = icon; }
+function setSyncTime() {
+  const el = document.getElementById('sync-time');
+  if (el) el.textContent = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+
+// バックグラウンド自動同期（トーストなし）
+async function autoSync() {
+  const s = getSettings();
+  if (!isCloudConfigured(s)) return;
+  try {
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`);
+    if (!res.ok) return;
+    const r = await res.json() || {};
+    if (r.players)   players   = r.players;
+    if (r.matches)   matches   = r.matches;
+    if (r.schedules) schedules = r.schedules;
+    if (r.posts)     posts     = r.posts;
+    if (r.opponents) opponents = r.opponents;
+    saveLocal();
+    setSyncIcon('☁️');
+    setSyncTime();
+    renderCurrentPage();
+  } catch(e) { /* silent */ }
+}
 
 // ===== NAVIGATION =====
 const bottomNavPages = ['page-dashboard','page-schedule','page-matches','page-players','page-more'];
@@ -2358,7 +2383,7 @@ function bindEvents() {
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettingsForm);
   document.getElementById('btn-load-cloud')?.addEventListener('click', loadFromCloud);
   document.getElementById('btn-save-cloud')?.addEventListener('click', saveToCloud);
-  document.getElementById('btn-sync')?.addEventListener('click', saveToCloud);
+  document.getElementById('btn-sync')?.addEventListener('click', loadFromCloud);
 
   // Confirm dialog
   document.getElementById('confirm-ok')?.addEventListener('click', () => {
@@ -2393,6 +2418,7 @@ function initApp() {
   // Auto-load from cloud if configured
   if (isCloudConfigured(s)) {
     loadFromCloud().catch(() => {});
+    setInterval(autoSync, 60000); // 60秒ごとにバックグラウンド同期
   } else {
     setTimeout(() => showToast('⚙️ 設定画面で Firebase URL とシークレットを入力してください', 'info'), 800);
   }

@@ -184,19 +184,27 @@ function isCloudConfigured(s) {
 }
 
 // ===== STORAGE =====
+// クラブごとにLocalStorageキーを分ける（同ドメインの複数クラブが混ざらないように）
+function getLocalPrefix() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  const clubId = cfg.clubId || '';
+  return clubId ? `mp2_${clubId}_` : 'mp2_';
+}
 function loadLocal() {
-  players   = JSON.parse(localStorage.getItem('mp2_players')   || '[]');
-  matches   = JSON.parse(localStorage.getItem('mp2_matches')   || '[]');
-  schedules = JSON.parse(localStorage.getItem('mp2_schedules') || '[]');
-  posts     = JSON.parse(localStorage.getItem('mp2_posts')     || '[]');
-  opponents = JSON.parse(localStorage.getItem('mp2_opponents') || '[]');
+  const p = getLocalPrefix();
+  players   = JSON.parse(localStorage.getItem(`${p}players`)   || '[]');
+  matches   = JSON.parse(localStorage.getItem(`${p}matches`)   || '[]');
+  schedules = JSON.parse(localStorage.getItem(`${p}schedules`) || '[]');
+  posts     = JSON.parse(localStorage.getItem(`${p}posts`)     || '[]');
+  opponents = JSON.parse(localStorage.getItem(`${p}opponents`) || '[]');
 }
 function saveLocal() {
-  localStorage.setItem('mp2_players',   JSON.stringify(players));
-  localStorage.setItem('mp2_matches',   JSON.stringify(matches));
-  localStorage.setItem('mp2_schedules', JSON.stringify(schedules));
-  localStorage.setItem('mp2_posts',     JSON.stringify(posts));
-  localStorage.setItem('mp2_opponents', JSON.stringify(opponents));
+  const p = getLocalPrefix();
+  localStorage.setItem(`${p}players`,   JSON.stringify(players));
+  localStorage.setItem(`${p}matches`,   JSON.stringify(matches));
+  localStorage.setItem(`${p}schedules`, JSON.stringify(schedules));
+  localStorage.setItem(`${p}posts`,     JSON.stringify(posts));
+  localStorage.setItem(`${p}opponents`, JSON.stringify(opponents));
   scheduleCloudSave();
 }
 

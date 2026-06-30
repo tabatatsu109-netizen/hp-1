@@ -166,10 +166,12 @@ let oppSearchQuery = '';
 function getSettings() {
   const saved = JSON.parse(localStorage.getItem('mp_settings') || '{}');
   const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  // clubName/clubId/firebaseUrl は mp-config.js 優先（クラブ固有のプランナーURLに依存）
+  // firebaseSecret のみ LocalStorage 優先（端末ごとに入力するため）
   return {
-    clubName:       saved.clubName       || cfg.clubName       || 'クラブ名未設定',
-    clubId:         saved.clubId         || cfg.clubId         || '',
-    firebaseUrl:    saved.firebaseUrl    || cfg.firebaseUrl    || '',
+    clubName:       cfg.clubName       || saved.clubName       || 'クラブ名未設定',
+    clubId:         cfg.clubId         || saved.clubId         || '',
+    firebaseUrl:    cfg.firebaseUrl    || saved.firebaseUrl    || '',
     firebaseSecret: saved.firebaseSecret || cfg.firebaseSecret || '',
   };
 }

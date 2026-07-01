@@ -134,6 +134,12 @@ function renderHero() {
       ? `<img src="${HP_CONFIG.logoUrl}" alt="${HP_CONFIG.clubName}">`
       : `<span class="hero-logo-initial">${HP_CONFIG.clubName[0]}</span>`;
   }
+  const catsEl = document.getElementById('hero-cats');
+  if (catsEl && HP_CONFIG.categories && HP_CONFIG.categories.length) {
+    catsEl.innerHTML = HP_CONFIG.categories.map(c =>
+      `<span class="hero-cat-badge">${c}</span>`
+    ).join('');
+  }
 }
 
 // ---- NEXT MATCH ----

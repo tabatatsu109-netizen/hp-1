@@ -76,8 +76,8 @@
       <div class="sidebar-club-row">
         <div class="sidebar-club-avatar" id="sidebar-avatar">G</div>
         <div>
-          <div class="sidebar-club-name" id="sidebar-club-name">GRANDE FC</div>
-          <div class="sidebar-club-sub">グランデフットボールクラブ</div>
+          <div class="sidebar-club-name" id="sidebar-club-name">---</div>
+          <div class="sidebar-club-sub" id="sidebar-club-sub"></div>
         </div>
       </div>
     </div>
@@ -667,19 +667,19 @@
       <div class="page-inner" style="padding-top:12px">
         <div class="form-group">
           <label class="form-label">クラブ名</label>
-          <input class="form-input" type="text" id="settings-club-name" placeholder="クラブ名">
+          <input class="form-input" type="text" id="settings-club-name" readonly style="opacity:0.6;cursor:default">
         </div>
         <div class="form-group">
           <label class="form-label">クラブID（Firebase パス名）</label>
-          <input class="form-input" type="text" id="settings-club-id" placeholder="例: grande-fc">
+          <input class="form-input" type="text" id="settings-club-id" readonly style="opacity:0.6;cursor:default">
         </div>
         <div class="form-group">
           <label class="form-label">Firebase データベース URL</label>
-          <input class="form-input" type="text" id="settings-firebase-url" placeholder="https://xxx-default-rtdb.firebaseio.com">
+          <input class="form-input" type="text" id="settings-firebase-url" readonly style="opacity:0.6;cursor:default">
         </div>
         <div class="form-group">
           <label class="form-label">Firebase シークレット</label>
-          <input class="form-input" type="password" id="settings-firebase-secret" placeholder="データベースのシークレット">
+          <input class="form-input" type="password" id="settings-firebase-secret" placeholder="シークレットを入力してください">
         </div>
         <button class="btn btn-primary btn-full" id="btn-save-settings">設定を保存</button>
         <div class="spacer"></div>

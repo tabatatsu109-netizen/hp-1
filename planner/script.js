@@ -163,19 +163,23 @@ let oppPickerTarget = null;
 let oppSearchQuery = '';
 
 // ===== SETTINGS =====
-function getSettings() {
-  const saved = JSON.parse(localStorage.getItem('mp_settings') || '{}');
+// clubName/clubId/firebaseUrl は mp-config.js のみ。LocalStorageには firebaseSecret だけ保存。
+function getSecretKey() {
   const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
-  // clubName/clubId/firebaseUrl は mp-config.js 優先（クラブ固有のプランナーURLに依存）
-  // firebaseSecret のみ LocalStorage 優先（端末ごとに入力するため）
+  return cfg.clubId ? `mp_secret_${cfg.clubId}` : 'mp_secret';
+}
+function getSettings() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
   return {
-    clubName:       cfg.clubName       || saved.clubName       || 'クラブ名未設定',
-    clubId:         cfg.clubId         || saved.clubId         || '',
-    firebaseUrl:    cfg.firebaseUrl    || saved.firebaseUrl    || '',
-    firebaseSecret: saved.firebaseSecret || cfg.firebaseSecret || '',
+    clubName:       cfg.clubName    || 'クラブ名未設定',
+    clubId:         cfg.clubId      || '',
+    firebaseUrl:    cfg.firebaseUrl || '',
+    firebaseSecret: localStorage.getItem(getSecretKey()) || '',
   };
 }
-function saveSettings(s) { localStorage.setItem('mp_settings', JSON.stringify(s)); }
+function saveSettings(s) {
+  localStorage.setItem(getSecretKey(), s.firebaseSecret || '');
+}
 function getFirebaseUrl(s) {
   return `${s.firebaseUrl}/clubs/${s.clubId}`;
 }
@@ -2249,25 +2253,17 @@ function renderResultEntry() {
 // ===== SETTINGS =====
 function renderSettingsPage() {
   const s = getSettings();
-  document.getElementById('settings-club-name').value    = s.clubName       || '';
-  document.getElementById('settings-club-id').value      = s.clubId         || '';
-  document.getElementById('settings-firebase-url').value = s.firebaseUrl    || '';
+  document.getElementById('settings-club-name').value       = s.clubName    || '';
+  document.getElementById('settings-club-id').value         = s.clubId      || '';
+  document.getElementById('settings-firebase-url').value    = s.firebaseUrl || '';
   document.getElementById('settings-firebase-secret').value = s.firebaseSecret || '';
 }
 function saveSettingsForm() {
-  const s = {
-    clubName:       document.getElementById('settings-club-name').value.trim(),
-    clubId:         document.getElementById('settings-club-id').value.trim(),
-    firebaseUrl:    document.getElementById('settings-firebase-url').value.trim(),
-    firebaseSecret: document.getElementById('settings-firebase-secret').value.trim(),
-  };
-  saveSettings(s);
-  // Update header club name
-  document.getElementById('header-club-name').textContent = s.clubName || 'クラブ名未設定';
-  document.getElementById('sidebar-club-name').textContent = s.clubName || '---';
-  document.getElementById('hdr-avatar').textContent = (s.clubName||'G')[0];
-  document.getElementById('sidebar-avatar').textContent = (s.clubName||'G')[0];
+  const secret = document.getElementById('settings-firebase-secret').value.trim();
+  saveSettings({ firebaseSecret: secret });
   showToast('設定を保存しました', 'success');
+  // 保存後すぐにクラウドから読み込む
+  if (secret) loadFromCloud();
 }
 
 // ===== EVENT BINDINGS =====
@@ -2442,12 +2438,14 @@ function initApp() {
   loadLocal();
   bindEvents();
 
-  // Apply saved settings to UI
+  // Apply settings to UI (always from mp-config.js)
   const s = getSettings();
   document.getElementById('header-club-name').textContent = s.clubName || 'クラブ名未設定';
   document.getElementById('sidebar-club-name').textContent = s.clubName || '---';
-  document.getElementById('hdr-avatar').textContent = (s.clubName||'G')[0];
-  document.getElementById('sidebar-avatar').textContent = (s.clubName||'G')[0];
+  document.getElementById('hdr-avatar').textContent = (s.clubName||'?')[0];
+  document.getElementById('sidebar-avatar').textContent = (s.clubName||'?')[0];
+  const subEl = document.getElementById('sidebar-club-sub');
+  if (subEl) subEl.textContent = s.clubId || '';
 
   // Auto-load from cloud if configured
   if (isCloudConfigured(s)) {

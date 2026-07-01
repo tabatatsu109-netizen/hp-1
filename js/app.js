@@ -31,6 +31,10 @@ function applyClubName() {
   document.querySelectorAll('[data-club-full]').forEach(el => {
     el.textContent = HP_CONFIG.clubNameFull;
   });
+  // タイトルタグをクラブ名で上書き（テンプレートのハードコードを無効化）
+  if (HP_CONFIG.clubName) {
+    document.title = document.title.replace(/^.*?(?= — | 公式)/, HP_CONFIG.clubNameFull || HP_CONFIG.clubName);
+  }
 }
 
 // ===== Firebase 読み込み =====

@@ -53,10 +53,52 @@ var PAYS = SHOP_CONFIG.payMethods;
 var STS = ["未確認","確認済み","発注済み","入荷済み","受け渡し完了"];
 var ST_COLORS = ["#F59E0B","#3B82F6","#8B5CF6","#10B981","#9CA3AF"];
 
-/* 管理者キー（Firebaseシークレット）— ソースに書かず端末に保存する */
+/* 管理者キー（旧方式）— ソースに書かず端末に保存する */
 var SECRET_KEY = "shop_secret_" + SHOP_CONFIG.clubId;
 function getSecret(){ return localStorage.getItem(SECRET_KEY) || ""; }
 function setSecret(v){ localStorage.setItem(SECRET_KEY, v); }
+
+/* クラブアカウントログイン（Firebase Authentication）。旧方式の管理者キーも後方互換で使える */
+var AUTH_KEY = "shop_auth_" + SHOP_CONFIG.clubId;
+function getAuthState(){ try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch(e){ return null; } }
+var _idToken = "", _tokenExp = 0;
+function shopLogin(email, password){
+  var key = SHOP_CONFIG.firebaseApiKey || "";
+  if(!key) return Promise.reject(new Error("shop-config.js に firebaseApiKey が未設定です"));
+  return fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + key, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ email: email, password: password, returnSecureToken: true })
+  }).then(function(res){ return res.json().then(function(d){ return {ok: res.ok, d: d}; }); })
+  .then(function(r){
+    if(!r.ok) throw new Error("メールアドレスまたはパスワードが違います");
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ email: email, refreshToken: r.d.refreshToken }));
+    _idToken = r.d.idToken; _tokenExp = Date.now() + (parseInt(r.d.expiresIn,10)-300)*1000;
+    return r.d;
+  });
+}
+function refreshAuthToken(){
+  var st = getAuthState();
+  var key = SHOP_CONFIG.firebaseApiKey || "";
+  if(!st || !st.refreshToken || !key) return Promise.resolve("");
+  return fetch("https://securetoken.googleapis.com/v1/token?key=" + key, {
+    method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(st.refreshToken)
+  }).then(function(res){ return res.json().then(function(d){ return {ok:res.ok, d:d}; }); })
+  .then(function(r){
+    if(!r.ok){ if(r.d && r.d.error) localStorage.removeItem(AUTH_KEY); return ""; }
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ email: st.email, refreshToken: r.d.refresh_token || st.refreshToken }));
+    _idToken = r.d.id_token; _tokenExp = Date.now() + (parseInt(r.d.expires_in,10)-300)*1000;
+    return _idToken;
+  }).catch(function(){ return ""; });
+}
+/* 管理系リクエストの auth: ログイン中はIDトークン、未ログインなら旧キー */
+function authParam(){
+  if(getAuthState()){
+    if(_idToken && Date.now() < _tokenExp) return Promise.resolve(_idToken);
+    return refreshAuthToken().then(function(t){ return t || getSecret(); });
+  }
+  return Promise.resolve(getSecret());
+}
 
 function fmt(n){ return "¥" + n.toLocaleString(); }
 function fmtD(d){ return new Date(d).toLocaleDateString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit"}); }
@@ -104,9 +146,11 @@ function pushOrderToCloud(order){
   });
 }
 
-// 注文一覧の取得：管理者のみ（管理者キー必須）
+// 注文一覧の取得：管理者のみ（ログインまたは管理者キー必須）
 function fetchOrdersFromCloud(){
-  return fetch(FB_ORDERS_URL + ".json?auth=" + encodeURIComponent(getSecret())).then(function(res){
+  return authParam().then(function(a){
+    return fetch(FB_ORDERS_URL + ".json?auth=" + encodeURIComponent(a));
+  }).then(function(res){
     if(!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }).then(function(data){
@@ -121,10 +165,12 @@ function fetchOrdersFromCloud(){
 
 // ステータス更新：管理者のみ
 function updateOrderStatusCloud(fbKey, status){
-  return fetch(FB_ORDERS_URL + "/" + fbKey + "/status.json?auth=" + encodeURIComponent(getSecret()), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(status)
+  return authParam().then(function(a){
+    return fetch(FB_ORDERS_URL + "/" + fbKey + "/status.json?auth=" + encodeURIComponent(a), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(status)
+    });
   }).then(function(res){
     if(!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
@@ -133,8 +179,10 @@ function updateOrderStatusCloud(fbKey, status){
 
 // 注文削除：管理者のみ
 function deleteOrderCloud(fbKey){
-  return fetch(FB_ORDERS_URL + "/" + fbKey + ".json?auth=" + encodeURIComponent(getSecret()), {
-    method: "DELETE"
+  return authParam().then(function(a){
+    return fetch(FB_ORDERS_URL + "/" + fbKey + ".json?auth=" + encodeURIComponent(a), {
+      method: "DELETE"
+    });
   }).then(function(res){
     if(!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
@@ -582,8 +630,10 @@ function loginPageHtml(){
       '<div style="background:rgba(255,255,255,.06);border-radius:16px;padding:32px;width:100%;max-width:360px;border:1px solid rgba(200,169,74,.3)">'+
         '<div style="text-align:center;font-size:36px;margin-bottom:12px">🔐</div>'+
         '<div style="color:#fff;font-weight:900;font-size:26px;letter-spacing:3px;text-align:center;margin-bottom:4px;font-family:\'Barlow Condensed\',sans-serif">ADMIN</div>'+
-        '<div style="text-align:center;color:rgba(255,255,255,.45);font-size:11px;margin-bottom:16px;line-height:1.7">管理者キーを入力してください<br>（初回のみ・この端末に保存されます）</div>'+
-        '<input type="password" id="loginPw" value="'+esc(getSecret())+'" onkeydown="if(event.key===\'Enter\')App.doLogin()" style="width:100%;padding:11px 13px;border:1.5px solid rgba(255,255,255,.15);border-radius:8px;font-size:14px;background:rgba(255,255,255,.08);color:#fff;outline:none;margin-bottom:6px" placeholder="管理者キーを入力">'+
+        '<div style="text-align:center;color:rgba(255,255,255,.45);font-size:11px;margin-bottom:16px;line-height:1.7">クラブアカウントでログインしてください<br>（初回のみ・この端末に保存されます）</div>'+
+        '<input type="email" id="loginEmail" value="'+esc((getAuthState()||{}).email||'')+'" autocomplete="username" style="width:100%;padding:11px 13px;border:1.5px solid rgba(255,255,255,.15);border-radius:8px;font-size:14px;background:rgba(255,255,255,.08);color:#fff;outline:none;margin-bottom:8px" placeholder="メールアドレス">'+
+        '<input type="password" id="loginPw" onkeydown="if(event.key===\'Enter\')App.doLogin()" autocomplete="current-password" style="width:100%;padding:11px 13px;border:1.5px solid rgba(255,255,255,.15);border-radius:8px;font-size:14px;background:rgba(255,255,255,.08);color:#fff;outline:none;margin-bottom:6px" placeholder="パスワード">'+
+        '<div style="color:rgba(255,255,255,.3);font-size:10px;line-height:1.6;margin-bottom:4px">※ 旧方式の管理者キーをお使いの場合は、メール欄を空にしてキーをパスワード欄に入力</div>'+
         (S.pwErr ? '<div style="color:#f88;font-size:13px;text-align:center;margin-bottom:8px">'+esc(S.pwErr)+'</div>' : '')+
         '<button onclick="App.doLogin()" style="width:100%;padding:13px;background:'+G.gold+';color:'+G.g3+';border-radius:8px;font-weight:900;font-size:15px;margin-top:8px;margin-bottom:8px">ログイン</button>'+
         '<button onclick="App.goShop()" style="width:100%;padding:13px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-weight:700;font-size:14px">← ショップに戻る</button>'+
@@ -855,27 +905,33 @@ window.App = {
   goLogin: function(){ S.page = "login"; S.pwErr = ""; render(); },
   goShop: function(){ S.page = "shop"; render(); },
   doLogin: function(){
+    var email = document.getElementById("loginEmail") ? document.getElementById("loginEmail").value.trim() : "";
     var val = document.getElementById("loginPw") ? document.getElementById("loginPw").value.trim() : "";
-    if(!val){ S.pwErr = "管理者キーを入力してください"; render(); return; }
-    setSecret(val);
+    if(!val){ S.pwErr = "パスワード（または管理者キー）を入力してください"; render(); return; }
     S.pwErr = "";
     S.loadingAdmin = true;
     render();
-    fetchOrdersFromCloud().then(function(orders){
+    // メール入力あり → クラブアカウントログイン / なし → 旧方式の管理者キー
+    var pre;
+    if(email){ pre = shopLogin(email, val); }
+    else { setSecret(val); pre = Promise.resolve(); }
+    pre.then(function(){ return fetchOrdersFromCloud(); }).then(function(orders){
       S.orders = orders;
       S.ordersLoaded = true;
       S.loadingAdmin = false;
       S.page = "admin"; S.adminTab = "dash";
       render();
       // 管理用設定（imgbbキー）を読み込む
-      fetch(FB_ADMIN_URL + ".json?auth=" + encodeURIComponent(getSecret()))
+      authParam().then(function(a){
+        return fetch(FB_ADMIN_URL + ".json?auth=" + encodeURIComponent(a));
+      })
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(a){ if(a && a.imgbbKey){ S.imgbbKey = a.imgbbKey; render(); } })
         .catch(function(){});
     }).catch(function(err){
       console.error(err);
       S.loadingAdmin = false;
-      S.pwErr = "認証に失敗しました。管理者キーと通信環境をご確認ください。";
+      S.pwErr = (err && err.message) ? err.message : "認証に失敗しました。入力内容と通信環境をご確認ください。";
       render();
     });
   },
@@ -958,8 +1014,10 @@ window.App = {
         .then(function(j){
           var url = j && j.data && (j.data.display_url || j.data.url);
           if(!url) throw new Error("upload failed");
-          return fetch(FB_IMAGES_URL + "/" + pid + ".json?auth=" + encodeURIComponent(getSecret()), {
-            method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(url)
+          return authParam().then(function(a){
+            return fetch(FB_IMAGES_URL + "/" + pid + ".json?auth=" + encodeURIComponent(a), {
+              method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(url)
+            });
           }).then(function(res){ if(!res.ok) throw new Error("save failed"); return url; });
         })
         .then(function(url){
@@ -977,7 +1035,9 @@ window.App = {
     });
   },
   removeProductImage: function(pid){
-    fetch(FB_IMAGES_URL + "/" + pid + ".json?auth=" + encodeURIComponent(getSecret()), { method:"DELETE" })
+    authParam().then(function(a){
+      return fetch(FB_IMAGES_URL + "/" + pid + ".json?auth=" + encodeURIComponent(a), { method:"DELETE" });
+    })
       .then(function(res){
         if(!res.ok) throw new Error();
         var p = PRODS.filter(function(x){ return x.id===pid; })[0];
@@ -991,8 +1051,10 @@ window.App = {
     var inp = document.getElementById("imgbbKeyInput");
     var key = inp ? inp.value.trim() : "";
     if(!key){ showError("キーを入力してください"); return; }
-    fetch(FB_ADMIN_URL + "/imgbbKey.json?auth=" + encodeURIComponent(getSecret()), {
-      method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(key)
+    authParam().then(function(a){
+      return fetch(FB_ADMIN_URL + "/imgbbKey.json?auth=" + encodeURIComponent(a), {
+        method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(key)
+      });
     }).then(function(res){
       if(!res.ok) throw new Error();
       S.imgbbKey = key;

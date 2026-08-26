@@ -213,7 +213,81 @@ function getFirebaseUrl(s) {
   return `${s.firebaseUrl}/clubs/${s.clubId}`;
 }
 function isCloudConfigured(s) {
-  return !!(s.firebaseUrl && s.clubId && s.firebaseSecret);
+  return !!(s.firebaseUrl && s.clubId && (s.firebaseSecret || getAuthState()));
+}
+
+// ===== AUTH（クラブ別アカウントログイン / Firebase Authentication）=====
+// メール＋パスワードでログインし、IDトークンをクラウド同期の auth に使う。
+// 旧方式（管理者キー直入力）も後方互換として残す（両方ある場合はログインを優先）。
+function getAuthStoreKey() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.clubId ? `mp_auth_${cfg.clubId}` : 'mp_auth';
+}
+function getApiKey() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.firebaseApiKey || '';
+}
+function getAuthState() {
+  try { return JSON.parse(localStorage.getItem(getAuthStoreKey()) || 'null'); } catch(e) { return null; }
+}
+let _mpIdToken = '';
+let _mpTokenExp = 0;
+async function mpLogin(email, password) {
+  const key = getApiKey();
+  if (!key) throw new Error('mp-config.js に firebaseApiKey が未設定です');
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const code = data?.error?.message || '';
+    if (/INVALID|EMAIL_NOT_FOUND|PASSWORD|USER_DISABLED/.test(code)) throw new Error('メールアドレスまたはパスワードが違います');
+    throw new Error('ログインに失敗しました: ' + code);
+  }
+  localStorage.setItem(getAuthStoreKey(), JSON.stringify({ email, refreshToken: data.refreshToken }));
+  _mpIdToken = data.idToken;
+  _mpTokenExp = Date.now() + (parseInt(data.expiresIn, 10) - 300) * 1000;
+  return data;
+}
+function mpLogout() {
+  localStorage.removeItem(getAuthStoreKey());
+  _mpIdToken = '';
+  _mpTokenExp = 0;
+}
+async function refreshAuthToken() {
+  const st = getAuthState();
+  if (!st || !st.refreshToken) return '';
+  const key = getApiKey();
+  if (!key) return '';
+  try {
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(st.refreshToken)}`,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      // 認証サーバーに拒否された（無効化・失効）→ ログアウト状態にする。通信エラーは維持
+      if (data && data.error) mpLogout();
+      return '';
+    }
+    localStorage.setItem(getAuthStoreKey(), JSON.stringify({ email: st.email, refreshToken: data.refresh_token || st.refreshToken }));
+    _mpIdToken = data.id_token;
+    _mpTokenExp = Date.now() + (parseInt(data.expires_in, 10) - 300) * 1000;
+    return _mpIdToken;
+  } catch(e) { return ''; }
+}
+async function ensureAuthToken() {
+  if (!getAuthState()) return '';
+  if (_mpIdToken && Date.now() < _mpTokenExp) return _mpIdToken;
+  return refreshAuthToken();
+}
+// クラウド同期の auth パラメータ: ログイン中はIDトークン、未ログインなら旧シークレット
+async function getAuthParam(s) {
+  const t = await ensureAuthToken();
+  return t || s.firebaseSecret;
 }
 
 // ===== STORAGE =====
@@ -266,7 +340,7 @@ function scheduleCloudSave() {
   _cloudSaveTimer = setTimeout(async () => {
     try {
       setSyncIcon('💾');
-      const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+      const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ players, matches, schedules, posts, opponents, competitions, surveys, shokudoSessions, shokudoBmi, resetStamp: getResetStamp() }),
@@ -322,10 +396,10 @@ function applyCloudData(r) {
 
 async function loadFromCloud() {
   const s = getSettings();
-  if (!isCloudConfigured(s)) { showToast('設定でFirebase URLとシークレットを設定してください', 'error'); return; }
+  if (!isCloudConfigured(s)) { showToast('設定画面でログイン（またはキー設定）をしてください', 'error'); return; }
   setSyncIcon('🔄');
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`);
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const r = await res.json() || {};
     applyCloudData(r);
@@ -340,10 +414,10 @@ async function loadFromCloud() {
 }
 async function saveToCloud() {
   const s = getSettings();
-  if (!isCloudConfigured(s)) { showToast('設定でFirebase URLとシークレットを設定してください', 'error'); return; }
+  if (!isCloudConfigured(s)) { showToast('設定画面でログイン（またはキー設定）をしてください', 'error'); return; }
   setSyncIcon('💾');
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ players, matches, schedules, posts, opponents, competitions, surveys, shokudoSessions, shokudoBmi, resetStamp: getResetStamp() }),
@@ -367,7 +441,7 @@ async function autoSync() {
   const s = getSettings();
   if (!isCloudConfigured(s)) return;
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`);
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`);
     if (!res.ok) return;
     const r = await res.json() || {};
     applyCloudData(r);
@@ -1416,7 +1490,7 @@ async function publishToHP() {
 
   const s = getSettings();
   if (!isCloudConfigured(s)) {
-    showToast('設定でFirebase URLとシークレットを設定してください', 'error');
+    showToast('設定画面でログイン（またはキー設定）をしてください', 'error');
     return;
   }
 
@@ -1433,7 +1507,7 @@ async function publishToHP() {
 
   setSyncIcon('💾');
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
@@ -1453,7 +1527,7 @@ async function unpublish() {
   if (!postId) { showToast('投稿IDが見つかりません', 'error'); return; }
 
   const s = getSettings();
-  if (!isCloudConfigured(s)) { showToast('設定でFirebase URLとシークレットを設定してください', 'error'); return; }
+  if (!isCloudConfigured(s)) { showToast('設定画面でログイン（またはキー設定）をしてください', 'error'); return; }
 
   posts = posts.filter(p => p.id !== postId);
   currentMatch.result.grandePosted = false;
@@ -1463,7 +1537,7 @@ async function unpublish() {
 
   setSyncIcon('💾');
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
@@ -2213,7 +2287,7 @@ async function sendPost() {
 
   setSyncIcon('💾');
   try {
-    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+    const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
@@ -2247,7 +2321,7 @@ async function deletePost(id) {
     const s = getSettings();
     if (isCloudConfigured(s)) {
       try {
-        await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
+        await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
@@ -2453,7 +2527,7 @@ async function postAnnouncement() {
 
   setSyncIcon('💾');
   try {
-    const res = await fetch(`${getFirebaseUrl(sconf)}.json?auth=${sconf.firebaseSecret}`, {
+    const res = await fetch(`${getFirebaseUrl(sconf)}.json?auth=${await getAuthParam(sconf)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
@@ -2858,7 +2932,7 @@ async function renderSurveyResults() {
   body.innerHTML = `<div class="empty-state"><div class="empty-title">回答を読み込み中...</div></div>`;
   surveyResultsLoading = true;
   try {
-    const url = `${s.firebaseUrl}/surveys/${s.clubId}/${survey.id}/responses.json?auth=${s.firebaseSecret}`;
+    const url = `${s.firebaseUrl}/surveys/${s.clubId}/${survey.id}/responses.json?auth=${await getAuthParam(s)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json() || {};
@@ -3106,6 +3180,17 @@ function renderSettingsPage() {
   document.getElementById('settings-club-id').value         = s.clubId      || '';
   document.getElementById('settings-firebase-url').value    = s.firebaseUrl || '';
   document.getElementById('settings-firebase-secret').value = s.firebaseSecret || '';
+  // ログイン状態の表示
+  const authSt = getAuthState();
+  const stEl = document.getElementById('settings-auth-status');
+  if (stEl) {
+    stEl.textContent = authSt ? `✅ ログイン中: ${authSt.email}` : '未ログイン';
+    stEl.style.color = authSt ? 'var(--c-green, #4caf50)' : 'var(--c-muted)';
+  }
+  const emailEl = document.getElementById('settings-auth-email');
+  if (emailEl && authSt) emailEl.value = authSt.email || '';
+  const outBtn = document.getElementById('btn-auth-logout');
+  if (outBtn) outBtn.style.display = authSt ? '' : 'none';
   const gasUrlEl = document.getElementById('settings-gas-url');
   const gasKeyEl = document.getElementById('settings-gas-key');
   if (gasUrlEl) gasUrlEl.value = s.gasUrl || '';
@@ -3120,6 +3205,32 @@ function saveSettingsForm() {
   showToast('設定を保存しました', 'success');
   // 保存後すぐにクラウドから読み込む
   if (secret) loadFromCloud();
+}
+
+// クラブアカウントでログイン / ログアウト
+async function loginSettingsForm() {
+  const email = (document.getElementById('settings-auth-email')?.value || '').trim();
+  const pw = document.getElementById('settings-auth-pw')?.value || '';
+  if (!email || !pw) { showToast('メールアドレスとパスワードを入力してください', 'error'); return; }
+  const btn = document.getElementById('btn-auth-login');
+  if (btn) btn.disabled = true;
+  try {
+    await mpLogin(email, pw);
+    const pwEl = document.getElementById('settings-auth-pw');
+    if (pwEl) pwEl.value = '';
+    renderSettingsPage();
+    showToast('ログインしました', 'success');
+    loadFromCloud();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+function logoutSettingsForm() {
+  mpLogout();
+  renderSettingsPage();
+  showToast('ログアウトしました', 'info');
 }
 
 // 運用開始リセット：試合・投稿・スケジュールを全削除（選手・対戦相手・アンケートは残す）
@@ -3349,6 +3460,8 @@ function bindEvents() {
 
   // Settings
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettingsForm);
+  document.getElementById('btn-auth-login')?.addEventListener('click', loginSettingsForm);
+  document.getElementById('btn-auth-logout')?.addEventListener('click', logoutSettingsForm);
   document.getElementById('btn-load-cloud')?.addEventListener('click', loadFromCloud);
   document.getElementById('btn-save-cloud')?.addEventListener('click', saveToCloud);
   document.getElementById('btn-reset-operational')?.addEventListener('click', resetOperationalData);

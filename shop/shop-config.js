@@ -7,6 +7,7 @@ var SHOP_CONFIG = {
   clubNameFull: 'FC ALASERIO',
   clubId:       'alaserio',            // HP・Plannerと同じID
   firebaseUrl:  'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app',
+  firebaseApiKey: '',                  // Firebase の Web APIキー（クラブ別ログインに必要・コンソールで確認して記入）
 
   // カラー（HPのカラー: オレンジ #f77f00 × ネイビー #141f47 × グリーン #009a44）
   colors: {

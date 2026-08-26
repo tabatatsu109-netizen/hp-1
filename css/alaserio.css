@@ -2,7 +2,7 @@
    FC ALASERIO — オリジナルデザイン "WING"
    白ベース × 極太コンデンス(Anton) × 斜めの翼モチーフ
    モバイルファースト / ブレークポイント 768px・1024px
-   TEMPLATE: alaserio-original-1.0（グランデ系テンプレ不使用）
+   TEMPLATE: alaserio-original-1.0（このクラブ専用のフルカスタムCSS）
    ============================================================ */
 
 /* ── デザイントークン ── */
@@ -34,6 +34,7 @@
 html { scroll-behavior: smooth; }
 body {
   font-family: var(--font-jp);
+  font-size: 15px;
   background: var(--bg); color: var(--ink);
   -webkit-font-smoothing: antialiased;
   font-weight: 500;

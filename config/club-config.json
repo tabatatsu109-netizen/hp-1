@@ -1,0 +1,92 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "FC ALASERIO ホームページ設定ファイル"
+  },
+  "club": {
+    "name": "FC ALASERIO",
+    "shortName": "ALASERIO",
+    "nickname": "アラセリオ",
+    "abbreviation": "A",
+    "founded": "2019年4月",
+    "representative": "代表 髙部 聖",
+    "location": "山梨県南アルプス市",
+    "address": "山梨県南アルプス市在家塚650-2",
+    "description": "地域の中学生年代の子ども達に対し『本気でサッカーに取り組める環境を作りたい』という思いの元、サッカーを通して子どもの健全育成や自立、スポーツの振興に寄与することを目的とするクラブ。"
+  },
+  "design": {
+    "logo": "assets/logo.png",
+    "favicon": "assets/logo.png",
+    "mainColor": "#f77f00",
+    "subColor": "#ffffff",
+    "accentColor": "#009a44"
+  },
+  "hero": {
+    "location": "MINAMI ALPS",
+    "catchphrase": "ALA SERIO",
+    "catchphraseJa": "常に本気、全力であれ。",
+    "description": "翼(ALA)×本気(SERIO)。南アルプス市を拠点に、中学生年代が本気でサッカーに取り組める環境を。"
+  },
+  "philosophy": {
+    "pillars": [
+      {
+        "no": "01",
+        "title": "常に本気、全力であれ",
+        "body": "練習も試合も、常に本気で全力。選手・保護者・指導者が本気で取り組む中で成長し、それぞれの目指すステージへ羽ばたくことを目指します。"
+      },
+      {
+        "no": "02",
+        "title": "結果と成長",
+        "body": "結果だけでなく、そこに至るプロセスを大切に。日々の積み重ねが選手を大きく成長させると信じ、挑戦を続けます。"
+      },
+      {
+        "no": "03",
+        "title": "パーソナリティ",
+        "body": "自立・自制・尊敬・感謝・謙虚。サッカーを通じて躾や道徳を学び、人としての土台を育てます。"
+      }
+    ]
+  },
+  "school": {
+    "description": "中学生年代（U-15）の体験練習を随時受け付けています。まずはお気軽にお問い合わせください。",
+    "scheduleLabel": "体験練習 随時受付中",
+    "trials": [
+      {
+        "date": "随時",
+        "day": "",
+        "target": "U-15（中学生） 体験練習",
+        "time": "要問合せ",
+        "place": "山梨県南アルプス市内グラウンド"
+      }
+    ]
+  },
+  "players": [],
+  "matchCategories": [
+    "U15"
+  ],
+  "contact": {
+    "ground": "南アルプス市内グラウンド",
+    "address": "山梨県南アルプス市在家塚650-2",
+    "access": "中部横断道 白根ICから車で約10分",
+    "phone": "055-284-7717",
+    "email": ""
+  },
+  "sns": {
+    "instagram": "https://www.instagram.com/alaserio_2019/",
+    "youtube": "",
+    "facebook": "",
+    "lineUrl": ""
+  },
+  "integration": {
+    "firebaseUrl": "https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "firebaseClubId": "alaserio"
+  },
+  "features": {
+    "showNews": true,
+    "showResults": true,
+    "showSchedule": true,
+    "showSponsors": true,
+    "showPlayers": true,
+    "showSchool": true
+  },
+  "sponsors": []
+}

@@ -1,156 +1,327 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FC ALASERIO 公式サイト</title>
-<meta name="description" content="FC ALASERIO の公式サイト。試合結果・スケジュール・選手情報を掲載。">
-<meta property="og:title" content="FC ALASERIO 公式サイト">
-<meta property="og:description" content="FC ALASERIO — 常に本気、全力であれ。">
-<meta property="og:type" content="website">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>FC ALASERIO | 南アルプス市のジュニアユースサッカークラブ</title>
+  <meta name="theme-color" content="#141f47">
+  <link rel="icon" href="assets/logo.png">
+  <meta name="description" content="FC ALASERIO（アラセリオ）公式サイト。山梨県南アルプス市を拠点に、中学生年代（U-15）が本気でサッカーに取り組める環境を。体験練習随時受付中。">
+  <meta property="og:title" content="FC ALASERIO">
+  <meta property="og:description" content="常に本気、全力であれ。— 山梨県南アルプス市のジュニアユースサッカークラブ">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://tabatatsu109-netizen.github.io/hp-1/assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/alaserio.css?v=20260826b">
 </head>
-<body data-page="top">
+<body>
 
-<!-- ===== Header ===== -->
-<header class="site-header">
-  <div class="container">
-    <a href="index.html" class="header-logo">
-      <div class="logo-initial" id="header-logo-icon"></div>
-      <span data-club-name></span>
-    </a>
-    <nav class="header-nav">
-      <a href="#news">ニュース</a>
-      <a href="#match">試合結果</a>
-      <a href="players.html">選手紹介</a>
-      <a href="#join">入部案内</a>
-    </nav>
-    <a href="#join" class="header-join btn-join">体験申込</a>
-    <button class="header-menu-btn" id="menu-btn" aria-label="メニュー">
-      <span></span><span></span><span></span>
-    </button>
+  <!-- ユーティリティバー -->
+  <div class="ut">
+    <div class="ut-inner">
+      <a href="tel:0552847717" class="ut-tel">TEL 055-284-7717</a>
+      <a href="http://wing-2015.com" target="_blank" rel="noopener">WING FUTSAL CLUB</a>
+      <a href="https://www.instagram.com/alaserio_2019/" target="_blank" rel="noopener">Instagram</a>
+    </div>
   </div>
-</header>
 
-<!-- Mobile nav -->
-<nav class="mobile-nav" id="mobile-nav">
-  <a href="#news" onclick="closeMobileNav()">ニュース</a>
-  <a href="#match" onclick="closeMobileNav()">試合結果</a>
-  <a href="players.html" onclick="closeMobileNav()">選手紹介</a>
-  <a href="#join" onclick="closeMobileNav()">入部案内</a>
-  <a href="#join" class="btn-join-mobile btn-join" onclick="closeMobileNav()">体験申込はこちら</a>
-</nav>
-
-<!-- ===== Hero ===== -->
-<section class="hero">
-  <div class="container">
-    <div class="hero-content">
-      <div class="hero-logo-wrap" id="hero-logo"></div>
-      <h1 class="hero-title" id="hero-title"></h1>
-      <p class="hero-sub" id="hero-sub"></p>
-      <div class="hero-cta">
-        <a href="#match" class="btn-hero-primary">試合結果を見る</a>
-        <a href="#join" class="btn-hero-secondary">入部を検討する</a>
+  <!-- ヘッダー -->
+  <header class="gh">
+    <div class="gh-inner">
+      <a href="index.html" class="gh-logo">
+        <img id="club-logo" src="assets/logo.png" alt="FC ALASERIO エンブレム">
+        <span class="gh-logo-fallback" id="logo-abbr">A</span>
+        <span class="gh-logo-text">
+          <span class="gh-logo-sub">MINAMI ALPS</span>
+          <span class="gh-logo-name">FC ALASERIO</span>
+        </span>
+      </a>
+      <nav class="gh-nav">
+        <a href="news.html"><span class="n-en">News</span><span class="n-ja">お知らせ</span></a>
+        <a href="matches.html"><span class="n-en">Match</span><span class="n-ja">試合情報</span></a>
+        <a href="team.html"><span class="n-en">Team</span><span class="n-ja">選手・スタッフ</span></a>
+        <a href="club.html"><span class="n-en">Club</span><span class="n-ja">クラブを知る</span></a>
+        <a href="join.html"><span class="n-en">Join us</span><span class="n-ja">入会・体験</span></a>
+        <a href="documents.html"><span class="n-en">Docs</span><span class="n-ja">各種書類</span></a>
+        <a href="shop/"><span class="n-en">Shop</span><span class="n-ja">アイテムショップ</span></a>
+        <a href="contact.html"><span class="n-en">Contact</span><span class="n-ja">お問い合わせ</span></a>
+      </nav>
+      <div class="gh-actions">
+        <a href="join.html#apply" class="gh-cta">Trial<small>体験申込</small></a>
+        <button class="gh-burger" id="hamburger-btn" aria-label="メニューを開く"><span></span><span></span><span></span></button>
       </div>
     </div>
-  </div>
-</section>
+  </header>
 
-<!-- ===== Next Match ===== -->
-<section class="section">
-  <div class="container skeleton-wrap">
-    <div class="section-label">NEXT MATCH</div>
-    <div class="section-hdr">
-      <h2 class="section-title">次の試合</h2>
+  <!-- モバイルメニュー -->
+  <nav class="m-nav" id="mobile-nav">
+    <button class="m-nav-close" id="mobile-nav-close" aria-label="メニューを閉じる">✕</button>
+    <a class="m-link" href="news.html"><span class="n-en">News</span><span class="n-ja">お知らせ</span></a>
+    <a class="m-link" href="matches.html"><span class="n-en">Match</span><span class="n-ja">試合情報</span></a>
+    <a class="m-link" href="team.html"><span class="n-en">Team</span><span class="n-ja">選手・スタッフ</span></a>
+    <a class="m-link" href="club.html"><span class="n-en">Club</span><span class="n-ja">クラブを知る</span></a>
+    <a class="m-link" href="join.html"><span class="n-en">Join us</span><span class="n-ja">入会・体験</span></a>
+    <a class="m-link" href="documents.html"><span class="n-en">Docs</span><span class="n-ja">各種書類</span></a>
+    <a class="m-link" href="shop/"><span class="n-en">Shop</span><span class="n-ja">アイテムショップ</span></a>
+    <a class="m-link" href="contact.html"><span class="n-en">Contact</span><span class="n-ja">お問い合わせ</span></a>
+    <div class="m-nav-ctas">
+      <a href="join.html#apply" class="m-cta-trial">体験申込はこちら</a>
     </div>
-    <div id="next-match" data-skeleton></div>
-  </div>
-</section>
+  </nav>
 
-<!-- ===== News ===== -->
-<section class="section" id="news" style="padding-top:0">
-  <div class="container skeleton-wrap">
-    <div class="section-label">NEWS</div>
-    <div class="section-hdr">
-      <h2 class="section-title">お知らせ</h2>
-      <a href="news.html" class="link-more">一覧を見る →</a>
+  <!-- ヒーロー: 斜め分割 -->
+  <section class="hx">
+    <div class="hx-grid">
+      <div class="hx-photo" style="background-image:url('assets/photo2.jpg')">
+        <img class="hx-emblem" src="assets/logo.png" alt="">
+      </div>
+      <div class="hx-body">
+        <h1 class="hx-title">Ala<span class="hx-serio">Serio</span></h1>
+        <p class="hx-catch" id="hero-subcopy">常に本気、全力であれ。</p>
+        <p class="hx-sub">FC ALASERIO — 山梨県南アルプス市のジュニアユースサッカークラブ（U-15）</p>
+        <div class="hx-ctas">
+          <a href="join.html#apply" class="btn btn-orange">体験申込はこちら</a>
+          <a href="club.html" class="btn btn-ghost">クラブを知る</a>
+        </div>
+      </div>
     </div>
-    <div id="news-list" data-skeleton></div>
-  </div>
-</section>
+  </section>
 
-<!-- ===== Match Results ===== -->
-<section class="section" id="match" style="background:#fff">
-  <div class="container skeleton-wrap">
-    <div class="section-label">MATCH</div>
-    <div class="section-hdr">
-      <h2 class="section-title">試合結果</h2>
-      <a href="matches.html" class="link-more">試合日程をすべて見る →</a>
-    </div>
-    <div class="match-tabs" id="match-tabs"></div>
-    <div id="match-result-list" data-skeleton></div>
-  </div>
-</section>
-
-<!-- ===== Players ===== -->
-<section class="section section-dark" id="players">
-  <div class="container skeleton-wrap">
-    <div class="section-label">PLAYERS</div>
-    <div class="section-hdr">
-      <h2 class="section-title">選手のプロフィール</h2>
-      <a href="players.html" class="link-more" style="color:var(--c-accent);border-color:var(--c-accent)">全員を見る →</a>
-    </div>
-    <div class="players-preview-grid players-grid" id="players-preview" data-skeleton></div>
-  </div>
-</section>
-
-<!-- ===== Join ===== -->
-<section class="join-section" id="join">
-  <div class="container">
-    <p class="section-label" style="color:rgba(255,255,255,.6)">JOIN US</p>
-    <h2 class="join-title">一緒にサッカーをしよう</h2>
-    <p class="join-sub">体験練習随時受付中！まずはお気軽にご連絡ください。</p>
-    <a href="#" class="btn-join">体験申込はこちら</a>
-  </div>
-</section>
-
-<!-- ===== Footer ===== -->
-<footer class="site-footer">
-  <div class="container">
-    <div class="footer-inner">
-      <div class="footer-logo" data-club-name></div>
-      <div class="footer-sns" id="footer-sns"></div>
-      <div class="footer-copy">© 2025 <span data-club-name></span>. All rights reserved.</div>
+  <!-- ニュースティッカー -->
+  <div class="tick" aria-hidden="true">
+    <div class="tick-inner">
+      <span class="tick-label">Topics</span>
+      <div class="tick-track"><div class="tick-move" id="ticker-inner"><span>FC ALASERIO 公式サイト</span></div></div>
     </div>
   </div>
-</footer>
 
-<!-- Fixed CTA -->
-<a href="#join" class="fixed-join btn-join"></a>
+  <!-- マッチデー・バナー (JSが自動制御) -->
+  <div id="matchday-banner"></div>
 
-<script src="js/config.js"></script>
-<script src="js/app.js"></script>
-<script>
-// ヘッダーロゴ初期化
-document.getElementById('header-logo-icon').textContent = HP_CONFIG.clubName[0] || 'G';
+  <!-- NEXT MATCH -->
+  <section class="nx">
+    <div class="container">
+      <div class="sh sh--invert">
+        <div class="sh-kicker"><span>Next Match</span></div>
+        <div class="sh-title">次の試合</div>
+      </div>
+      <div class="tab-btns" id="tab-buttons"></div>
+      <div class="match-next-panel">
+        <div id="match-next-inner">
+          <div class="nm-left">
+            <div class="nm-badge-row"><div class="nm-badge">NEXT MATCH</div></div>
+            <div class="nm-comp">読み込み中...</div>
+          </div>
+          <div class="nm-center" style="color:#8b9bc9;font-size:13px;">データを取得中</div>
+        </div>
+        <div class="nm-actions">
+          <a href="matches.html" class="nm-btn nm-btn-dark">試合日程・結果を見る</a>
+        </div>
+      </div>
+      <p id="nx-empty" style="display:none;color:#8b9bc9;font-weight:700;font-size:14px;padding:6px 0 2px;">
+        現在予定されている試合はありません。日程は決まり次第掲載します。
+        <a href="matches.html" style="color:#ff9d33;">日程・結果一覧へ →</a>
+      </p>
+    </div>
+  </section>
 
-// フッター SNS
-const snsBtns = [];
-if (HP_CONFIG.instagram) snsBtns.push(`<a href="https://instagram.com/${HP_CONFIG.instagram}" target="_blank" rel="noopener">Instagram</a>`);
-if (HP_CONFIG.twitter) snsBtns.push(`<a href="https://twitter.com/${HP_CONFIG.twitter}" target="_blank" rel="noopener">Twitter / X</a>`);
-document.getElementById('footer-sns').innerHTML = snsBtns.join('');
+  <!-- 最近の結果 -->
+  <section class="rs">
+    <div class="container">
+      <div class="sh">
+        <div class="sh-kicker"><span>Results / <span id="active-cat"></span></span></div>
+        <div class="sh-title">最近の結果</div>
+      </div>
+      <div id="results-list"><p class="no-data">読み込み中...</p></div>
+      <a href="matches.html" class="sh-more">すべての結果を見る</a>
+      <span id="active-cat2" style="display:none;"></span><span id="active-comp" style="display:none;"></span>
+    </div>
+  </section>
 
-// モバイルナビ
-const menuBtn = document.getElementById('menu-btn');
-const mobileNav = document.getElementById('mobile-nav');
-menuBtn.addEventListener('click', () => mobileNav.classList.toggle('open'));
-function closeMobileNav() { mobileNav.classList.remove('open'); }
+  <!-- NEWS -->
+  <section class="nw">
+    <div class="container">
+      <div class="sh">
+        <div class="sh-kicker"><span>News</span></div>
+        <div class="sh-title">お知らせ</div>
+      </div>
+      <div id="news-list"><p class="no-data">読み込み中...</p></div>
+      <a href="news.html" class="sh-more">お知らせ一覧へ</a>
+    </div>
+  </section>
 
-// スクロール時にモバイルナビを閉じる
-window.addEventListener('scroll', () => mobileNav.classList.remove('open'));
-</script>
+  <!-- PLAYERS スライダー -->
+  <section class="pl">
+    <div class="container">
+      <div class="sh sh--invert">
+        <div class="sh-kicker"><span>Players</span></div>
+        <div class="sh-title">選手紹介</div>
+      </div>
+    </div>
+    <div class="pl-track" id="pl-track"><p class="no-data" style="color:#8b9bc9;padding-left:4px;">読み込み中...</p></div>
+    <div class="container"><a href="team.html" class="sh-more">選手・スタッフ紹介へ</a></div>
+  </section>
+
+  <!-- カテゴリタイル -->
+  <section class="tl">
+    <div class="container">
+      <div class="tl-grid">
+        <a href="club.html" class="tl-card" style="background-image:url('assets/photo3.jpg')">
+          <div class="tl-body"><span class="tl-en">About Club</span><span class="tl-ja">クラブを知る — 理念・エンブレム・概要</span></div>
+        </a>
+        <a href="join.html" class="tl-card" style="background-image:url('assets/photo1.jpg')">
+          <div class="tl-body"><span class="tl-en">Join us</span><span class="tl-ja">入会・体験のご案内 — 体験随時受付中</span></div>
+        </a>
+        <a href="documents.html" class="tl-card tl-card--solid">
+          <div class="tl-body"><span class="tl-en">Documents</span><span class="tl-ja">各種書類 — 入会申込書・会則など</span></div>
+        </a>
+        <a href="http://wing-2015.com" target="_blank" rel="noopener" class="tl-card" style="background-image:url('assets/photo2.jpg')">
+          <div class="tl-body"><span class="tl-en">Wing Futsal Club</span><span class="tl-ja">関連施設 — フットサル場・スクール</span></div>
+        </a>
+      </div>
+      <div class="mv-links">
+        <a href="https://youtu.be/8yuOjAcN1t8" target="_blank" rel="noopener">クラブPV【2023】を見る</a>
+        <a href="https://youtu.be/MAWyS7VC1t8" target="_blank" rel="noopener">クラブ説明ムービーを見る</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ステートメント -->
+  <section class="st">
+    <div class="st-inner">
+      <p class="st-en">Ala × Serio</p>
+      <p class="st-ja">常に本気、全力であれ。</p>
+      <p class="st-desc">
+        スペイン語で『Ala：翼』『Serio：本気』。南アルプス市のシンボル鳥ライチョウの翼のように、
+        選手・保護者・指導者が本気で取り組む中で成長し、それぞれの目指すステージへと羽ばたいてほしい。
+        その想いをクラブ名に込めています。
+      </p>
+      <a href="club.html" class="st-link">クラブの想いをもっと知る →</a>
+    </div>
+  </section>
+
+  <!-- スポンサー -->
+  <section class="sp">
+    <div class="container">
+      <div class="sp-label">Sponsor</div>
+      <div class="sp-items">
+        <div class="sp-item">合同会社はなわ</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- フッター -->
+  <footer class="gf">
+    <div class="gf-top">
+      <div class="gf-top-inner">
+        <div class="gf-brand">
+          <img src="assets/logo.png" alt="FC ALASERIO">
+          <div>
+            <div class="gf-brand-name" id="footer-club-name">FC ALASERIO</div>
+            <div class="gf-brand-sub" id="footer-address">山梨県南アルプス市在家塚650-2</div>
+          </div>
+        </div>
+        <nav class="gf-nav">
+          <a href="news.html">お知らせ</a>
+          <a href="matches.html">試合情報</a>
+          <a href="team.html">選手・スタッフ</a>
+          <a href="club.html">クラブを知る</a>
+          <a href="join.html">入会・体験</a>
+          <a href="documents.html">各種書類</a>
+          <a href="shop/">アイテムショップ</a>
+          <a href="contact.html">お問い合わせ</a>
+        </nav>
+        <div class="gf-sns">
+          <a href="https://www.instagram.com/alaserio_2019/" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 3.3.1 4.8 1.7 4.9 4.9.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.8c-.1 3.2-1.7 4.8-4.9 4.9-1.3.1-1.6.1-4.9.1-3.2 0-3.6 0-4.8-.1-3.3-.1-4.8-1.7-4.9-4.9-.1-1.3-.1-1.6-.1-4.8s0-3.6.1-4.8C2.4 4 4 2.4 7.2 2.3c1.2-.1 1.6-.1 4.8-.1zM12 0C8.7 0 8.3 0 7.1.1 2.7.3.3 2.7.1 7.1 0 8.3 0 8.7 0 12s0 3.7.1 4.9c.2 4.4 2.6 6.8 7 7 1.2.1 1.6.1 4.9.1s3.7 0 4.9-.1c4.4-.2 6.8-2.6 7-7 .1-1.2.1-1.6.1-4.9s0-3.7-.1-4.9c-.2-4.4-2.6-6.8-7-7C15.7 0 15.3 0 12 0zm0 5.8a6.2 6.2 0 1 0 0 12.4 6.2 6.2 0 0 0 0-12.4zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.8a1.4 1.4 0 1 0 0 2.9 1.4 1.4 0 0 0 0-2.9z"/></svg></a>
+        </div>
+      </div>
+    </div>
+    <div class="gf-bottom">
+      <div class="gf-bottom-inner">
+        <div class="gf-legal">
+          <a href="club.html">クラブ概要</a>
+          <a href="contact.html">お問い合わせ</a>
+        </div>
+        <span>© <span id="footer-year"></span> <span id="footer-club-name-copy">FC ALASERIO</span>. ALL RIGHTS RESERVED.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- フローティングCTA -->
+  <div class="float-btns">
+    <a href="join.html#apply" class="fb-trial">体験申込</a>
+  </div>
+
+  <!-- ニュース / 試合結果 詳細モーダル -->
+  <div class="nd-overlay" id="news-detail-overlay">
+    <div class="nd-box">
+      <button class="nd-close" id="news-detail-close" aria-label="閉じる">✕</button>
+      <div class="nd-meta">
+        <span class="nd-tag" id="news-detail-tag"></span>
+        <span class="nd-date" id="news-detail-date"></span>
+      </div>
+      <h3 class="nd-title" id="news-detail-title"></h3>
+      <img class="nd-image" id="news-detail-image" alt="">
+      <p class="nd-body" id="news-detail-body"></p>
+    </div>
+  </div>
+
+  <script src="js/config-loader.js?v=20260826b"></script>
+  <script src="js/match-planner-connector.js?v=20260826b"></script>
+  <script src="js/mobile-experience.js?v=20260826b"></script>
+  <script>
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
+
+    // モバイルメニュー
+    var mobileNav = document.getElementById('mobile-nav');
+    document.getElementById('hamburger-btn').addEventListener('click', function(){ mobileNav.classList.add('open'); });
+    document.getElementById('mobile-nav-close').addEventListener('click', function(){ mobileNav.classList.remove('open'); });
+    mobileNav.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', function(){ mobileNav.classList.remove('open'); }); });
+
+    // ConfigLoader (共通反映)
+    ConfigLoader.apply({
+      pageTitle: '公式サイト',
+      mappings: [{ path: 'hero.catchphraseJa', selector: '#hero-subcopy' }]
+    });
+
+    // 次の試合が無いときは案内文を表示（コネクタがパネルを隠すのを検知）
+    document.addEventListener('grande:data', function(){
+      setTimeout(function(){
+        var panel = document.querySelector('.match-next-panel');
+        var empty = document.getElementById('nx-empty');
+        if(panel && empty) empty.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+      }, 150);
+    });
+
+    // ── 選手スライダー (Match Planner 連携) ──
+    (function(){
+      function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+      var posColor = { GK: '#b8870b', DF: '#2a6fd6', MF: '#009a44', FW: '#d24b52' };
+      ConfigLoader.load().then(function(c){
+        var fbUrl = (c.integration && c.integration.firebaseUrl) || 'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app';
+        var clubId = (c.integration && c.integration.firebaseClubId) || 'alaserio';
+        return fetch(fbUrl + '/clubs/' + clubId + '.json');
+      }).then(function(r){ return r.json(); }).then(function(data){
+        var track = document.getElementById('pl-track');
+        var players = ((data && data.players) || [])
+          .filter(function(p){ return p && p.name && String(p.category||'').toLowerCase() !== 'staff'; })
+          .sort(function(a,b){ return (parseInt(a.number)||999) - (parseInt(b.number)||999); })
+          .slice(0, 16);
+        if(players.length === 0){ track.innerHTML = '<p class="no-data" style="color:#8b9bc9;">選手情報は準備中です</p>'; return; }
+        track.innerHTML = players.map(function(p){
+          var pos = p.position || p.mainGroup || '';
+          var pc = posColor[pos] || '#55628f';
+          return '<a href="team.html" class="pl-card">' +
+            '<span class="pl-card-num">' + esc(p.number || '') + '</span>' +
+            (pos ? '<span class="pl-card-pos" style="background:' + pc + ';">' + esc(pos) + '</span>' : '') +
+            '<span class="pl-card-name" style="display:block;">' + esc(p.name) + '</span>' +
+            '<span class="pl-card-meta" style="display:block;">' + esc(p.nameRoman || p.nameEn || p.grade || '') + '</span>' +
+            '</a>';
+        }).join('');
+      }).catch(function(e){ console.error('[players]', e); });
+    })();
+  </script>
 </body>
 </html>

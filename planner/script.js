@@ -161,12 +161,34 @@ let editingOpponentIdx = null;
 let oppImportPreviewRows = [];
 let oppPickerTarget = null;
 let oppSearchQuery = '';
+let competitions = [];
+let editingCompetitionIdx = null;
+let statsTab = 'competition';
+let surveys = [];
+let editingSurveyIdx = null;
+let surveyQuestions = [];
+let surveyParticipants = [];
+let participantSearchQuery = '';
+let currentSurveyId = null;
+let surveyResponses = [];
+let surveyResultsLoading = false;
+let responseSearchQuery = '';
+let expandedResponseKeys = new Set();
+let shokudoSessions = [];   // 食堂: 食事セッション {id, date, menu, cups:{playerId:杯数}}
+let shokudoBmi = [];        // 食堂: BMI記録 {id, playerId, date, height, weight, bmi}
+let editingShokudoId = null;
+let shokudoTab = 'input';
+let shokudoRankMetric = 'count';
 
 // ===== SETTINGS =====
 // clubName/clubId/firebaseUrl は mp-config.js のみ。LocalStorageには firebaseSecret だけ保存。
 function getSecretKey() {
   const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
   return cfg.clubId ? `mp_secret_${cfg.clubId}` : 'mp_secret';
+}
+function getGasStoreKey(suffix) {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.clubId ? `mp_gas_${suffix}_${cfg.clubId}` : `mp_gas_${suffix}`;
 }
 function getSettings() {
   const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
@@ -175,10 +197,17 @@ function getSettings() {
     clubId:         cfg.clubId      || '',
     firebaseUrl:    cfg.firebaseUrl || '',
     firebaseSecret: localStorage.getItem(getSecretKey()) || '',
+    gasUrl:         localStorage.getItem(getGasStoreKey('url')) || '',
+    gasKey:         localStorage.getItem(getGasStoreKey('key')) || '',
   };
 }
 function saveSettings(s) {
   localStorage.setItem(getSecretKey(), s.firebaseSecret || '');
+  if ('gasUrl' in s) localStorage.setItem(getGasStoreKey('url'), s.gasUrl || '');
+  if ('gasKey' in s) localStorage.setItem(getGasStoreKey('key'), s.gasKey || '');
+}
+function isGasConfigured(s) {
+  return !!(s.gasUrl && s.gasKey);
 }
 function getFirebaseUrl(s) {
   return `${s.firebaseUrl}/clubs/${s.clubId}`;
@@ -201,7 +230,20 @@ function loadLocal() {
   schedules = JSON.parse(localStorage.getItem(`${p}schedules`) || '[]');
   posts     = JSON.parse(localStorage.getItem(`${p}posts`)     || '[]');
   opponents = JSON.parse(localStorage.getItem(`${p}opponents`) || '[]');
+  competitions = JSON.parse(localStorage.getItem(`${p}competitions`) || '[]');
+  surveys   = JSON.parse(localStorage.getItem(`${p}surveys`)   || '[]');
+  shokudoSessions = JSON.parse(localStorage.getItem(`${p}shokudoSessions`) || '[]');
+  shokudoBmi      = JSON.parse(localStorage.getItem(`${p}shokudoBmi`)      || '[]');
 }
+// 運用開始リセットの印。クラウドにも保存して全端末に「削除済み」を伝える。
+// これが無いと、古いデータを持った端末が保存した時に削除済みデータが復活してしまう
+function getResetStamp() {
+  return parseInt(localStorage.getItem(`${getLocalPrefix()}resetStamp`) || '0', 10) || 0;
+}
+function setResetStamp(v) {
+  localStorage.setItem(`${getLocalPrefix()}resetStamp`, String(v));
+}
+
 function saveLocal() {
   const p = getLocalPrefix();
   localStorage.setItem(`${p}players`,   JSON.stringify(players));
@@ -209,6 +251,10 @@ function saveLocal() {
   localStorage.setItem(`${p}schedules`, JSON.stringify(schedules));
   localStorage.setItem(`${p}posts`,     JSON.stringify(posts));
   localStorage.setItem(`${p}opponents`, JSON.stringify(opponents));
+  localStorage.setItem(`${p}competitions`, JSON.stringify(competitions));
+  localStorage.setItem(`${p}surveys`,   JSON.stringify(surveys));
+  localStorage.setItem(`${p}shokudoSessions`, JSON.stringify(shokudoSessions));
+  localStorage.setItem(`${p}shokudoBmi`,      JSON.stringify(shokudoBmi));
   scheduleCloudSave();
 }
 
@@ -223,7 +269,7 @@ function scheduleCloudSave() {
       const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+        body: JSON.stringify({ players, matches, schedules, posts, opponents, competitions, surveys, shokudoSessions, shokudoBmi, resetStamp: getResetStamp() }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSyncIcon('☁️');
@@ -242,6 +288,38 @@ function saveCurrentMatch() {
 }
 
 // ===== CLOUD =====
+// クラウドから取得したデータをローカルへ適用する。
+// resetStamp（運用開始リセットの印）を比較して削除が全端末へ確実に伝わるようにする：
+//  - クラウドの印が新しい → この端末はリセット未適用 → クラウドの状態をそのまま採用
+//  - ローカルの印が新しい → 古い端末がリセット前のデータを書き戻した状態 → 取り込まず正しい状態を再送
+function applyCloudData(r) {
+  const cloudStamp = r.resetStamp || 0;
+  const localStamp = getResetStamp();
+
+  if (r.players)   players   = r.players;
+  if (r.opponents) opponents = r.opponents;
+  if (r.competitions) competitions = r.competitions;
+  if (r.surveys)   surveys   = r.surveys;
+  if (r.shokudoSessions) shokudoSessions = r.shokudoSessions;
+  if (r.shokudoBmi)      shokudoBmi      = r.shokudoBmi;
+
+  if (cloudStamp > localStamp) {
+    matches   = Array.isArray(r.matches)   ? r.matches   : [];
+    schedules = Array.isArray(r.schedules) ? r.schedules : [];
+    posts     = Array.isArray(r.posts)     ? r.posts     : [];
+    currentMatch = null;
+    selectedAnnSchedId = null;
+    setResetStamp(cloudStamp);
+  } else if (cloudStamp === localStamp) {
+    if (r.matches)   matches   = r.matches;
+    if (r.schedules) schedules = r.schedules;
+    if (r.posts)     posts     = r.posts;
+  }
+  // cloudStamp < localStamp の場合は試合・投稿・予定を取り込まない
+  // （下の saveLocal → クラウド保存で正しい状態と印を書き戻して修復する）
+  saveLocal();
+}
+
 async function loadFromCloud() {
   const s = getSettings();
   if (!isCloudConfigured(s)) { showToast('設定でFirebase URLとシークレットを設定してください', 'error'); return; }
@@ -250,12 +328,7 @@ async function loadFromCloud() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const r = await res.json() || {};
-    if (r.players)   players   = r.players;
-    if (r.matches)   matches   = r.matches;
-    if (r.schedules) schedules = r.schedules;
-    if (r.posts)     posts     = r.posts;
-    if (r.opponents) opponents = r.opponents;
-    saveLocal();
+    applyCloudData(r);
     setSyncIcon('☁️');
     setSyncTime();
     showToast('クラウドから読み込みました', 'success');
@@ -273,7 +346,7 @@ async function saveToCloud() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      body: JSON.stringify({ players, matches, schedules, posts, opponents, competitions, surveys, shokudoSessions, shokudoBmi, resetStamp: getResetStamp() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
@@ -297,12 +370,7 @@ async function autoSync() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`);
     if (!res.ok) return;
     const r = await res.json() || {};
-    if (r.players)   players   = r.players;
-    if (r.matches)   matches   = r.matches;
-    if (r.schedules) schedules = r.schedules;
-    if (r.posts)     posts     = r.posts;
-    if (r.opponents) opponents = r.opponents;
-    saveLocal();
+    applyCloudData(r);
     setSyncIcon('☁️');
     setSyncTime();
     renderCurrentPage();
@@ -334,6 +402,13 @@ function showPage(pageId, opts = {}) {
   if (pageId === 'page-matches')      renderMatches();
   if (pageId === 'page-players')      renderPlayers();
   if (pageId === 'page-opponents')    renderOpponents();
+  if (pageId === 'page-competitions') renderCompetitions();
+  if (pageId === 'page-stats')        renderStatsPage();
+  if (pageId === 'page-survey')       renderSurveyList();
+  if (pageId === 'page-survey-results') renderSurveyResults();
+  if (pageId === 'page-sns')          renderSnsPage();
+  if (pageId === 'page-emergency')    renderEmergencyPage();
+  if (pageId === 'page-shokudo')      renderShokudoPage();
   if (pageId === 'page-news')         renderNews();
   if (pageId === 'page-announcement') renderAnnouncement();
   if (pageId === 'page-result-entry') renderResultEntry();
@@ -547,6 +622,9 @@ function renderSchedCard(sc, today) {
   const isPast = sc.date < today;
   const timeStr = [sc.time, sc.endTime].filter(Boolean).join('–');
   const name = sc.opponent ? `vs ${sc.opponent}` : (sc.title || sc.type);
+  const isMatchLike = sc.type !== '練習';
+  const linkedMatch = sc.matchId ? matches.find(m => m.id === sc.matchId) : null;
+  const resultPosted = !!(linkedMatch && linkedMatch.result && linkedMatch.result.grandePosted);
   return `
     <div class="sched-card" onclick="openScheduleModal('${sc.id}')">
       <div class="sched-card-inner">
@@ -567,7 +645,9 @@ function renderSchedCard(sc, today) {
         <div class="sched-card-right">
           ${isPast ? '<span class="past-pill">終了</span>' : ''}
           ${sc.posted ? '<span class="posted-pill">告知済み</span>' : ''}
-          ${!isPast && sc.type==='試合' ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();startAnnouncement('${sc.id}')">告知する</button>` : ''}
+          ${resultPosted ? '<span class="posted-pill">結果公開済み</span>' : ''}
+          ${!isPast && isMatchLike ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();startAnnouncement('${sc.id}')">📢 告知</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSnsFromSchedId('${sc.id}')">📸 SNS画像</button>` : ''}
+          ${isPast && isMatchLike && !resultPosted ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">🏆 結果を登録</button>` : ''}
           <button class="btn btn-ghost btn-sm" style="color:var(--c-red);font-size:12px" onclick="event.stopPropagation();deleteSchedule('${sc.id}')">削除</button>
         </div>
       </div>
@@ -631,6 +711,7 @@ function saveScheduleForm() {
   } else {
     schedules.push(sc);
   }
+  findOrCreateCompetition(sc.competition);
   saveLocal();
   closeModal('modal-schedule');
   showToast(editingSchedId ? '更新しました' : '追加しました', 'success');
@@ -682,7 +763,9 @@ function renderMatches() {
   const copySelect = document.getElementById('nm-copy');
   copySelect.innerHTML = '<option value="">引き継がない</option>' + items.slice(0,10).map(m => `<option value="${m.id}">${fmtDate(m.date)} ${m.opponent}</option>`).join('');
 }
+let resultFromSchedId = null; // スケジュール起点の結果登録（作成後にスケジュールと紐付ける）
 function openMatchCreateModal(prefill = {}) {
+  resultFromSchedId = null;
   document.getElementById('nm-opponent').value = prefill.opponent || '';
   document.getElementById('nm-date').value = prefill.date || todayStr();
   document.getElementById('nm-type').value = prefill.type || '公式戦';
@@ -723,9 +806,41 @@ function createMatch() {
     result: null,
   };
   matches.unshift(m);
+  findOrCreateCompetition(m.competition);
+  // スケジュールから来た場合は紐付けておく（二重表示を防ぐ）
+  if (resultFromSchedId) {
+    const sc = schedules.find(s => s.id === resultFromSchedId);
+    if (sc) sc.matchId = m.id;
+    resultFromSchedId = null;
+  }
   saveLocal();
   closeModal('modal-match-create');
   openMatchDetail(m.id);
+}
+// スケジュールカードのボタン用ヘルパー
+function openSnsFromSchedId(id) {
+  const sc = schedules.find(s => s.id === id);
+  if (sc) openSnsFromSchedule(sc);
+}
+function continueResultFromSchedule(id) {
+  const sc = schedules.find(s => s.id === id);
+  if (!sc) return;
+  const m = sc.matchId ? matches.find(x => x.id === sc.matchId) : null;
+  if (m) { openMatchDetail(m.id); } else { startResultFromSchedule(id); }
+}
+// スケジュールの予定から結果登録を始める（試合情報は自動入力）
+function startResultFromSchedule(schedId) {
+  const sc = schedules.find(s => s.id === schedId);
+  if (!sc) return;
+  openMatchCreateModal({
+    opponent: sc.opponent || '',
+    date: sc.date || '',
+    type: sc.type === '大会' ? 'フェスティバル' : '公式戦',
+    category: sc.category || '',
+    competition: sc.competition || '',
+    venue: sc.venue || '',
+  });
+  resultFromSchedId = schedId;
 }
 
 // ===== MATCH DETAIL =====
@@ -1321,7 +1436,7 @@ async function publishToHP() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
@@ -1351,7 +1466,7 @@ async function unpublish() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
@@ -1426,9 +1541,11 @@ function openPlayerModal(idx = null) {
     document.getElementById('pf-name-roman').value = p.nameRoman || '';
     document.getElementById('pf-number').value = p.number || '';
     document.getElementById('pf-grade').value = p.grade || '';
+    document.getElementById('pf-category').value = p.category || '';
     document.getElementById('pf-main-group').value = p.mainGroup || '';
     document.getElementById('pf-detail-pos').value = p.detailPos || '';
     document.getElementById('pf-sub').value = p.sub || '';
+    document.getElementById('pf-guardian-email').value = p.guardianEmail || '';
     document.getElementById('pf-photo').value = p.photo || '';
     document.getElementById('pf-profile').value = p.profile || '';
   } else {
@@ -1437,9 +1554,11 @@ function openPlayerModal(idx = null) {
     document.getElementById('pf-name-roman').value = '';
     document.getElementById('pf-number').value = '';
     document.getElementById('pf-grade').value = '';
+    document.getElementById('pf-category').value = '';
     document.getElementById('pf-main-group').value = '';
     document.getElementById('pf-detail-pos').value = '';
     document.getElementById('pf-sub').value = '';
+    document.getElementById('pf-guardian-email').value = '';
     document.getElementById('pf-photo').value = '';
     document.getElementById('pf-profile').value = '';
   }
@@ -1455,9 +1574,11 @@ function savePlayerForm() {
     nameRoman: document.getElementById('pf-name-roman').value.trim().toUpperCase(),
     number: document.getElementById('pf-number').value,
     grade: document.getElementById('pf-grade').value,
+    category: document.getElementById('pf-category').value,
     mainGroup,
     detailPos: document.getElementById('pf-detail-pos').value,
     sub: document.getElementById('pf-sub').value,
+    guardianEmail: document.getElementById('pf-guardian-email').value.trim(),
     photo: document.getElementById('pf-photo').value,
     profile: document.getElementById('pf-profile').value,
     main: mainGroup,
@@ -1611,6 +1732,119 @@ function deleteOpponent(idx) {
     opponents.splice(idx, 1);
     saveLocal();
     renderOpponents();
+    showToast('削除しました');
+  });
+}
+
+// ----- 大会マスター -----
+// 試合/予定の「大会・リーグ名」は自由入力のまま（datalist候補として提示するだけ）。
+// マスター側で名前を変更（リネーム）すると、紐づく matches/schedules の表記も一括で
+// 書き換える。これにより「表記ゆれを後から統合する」操作がリネームだけで完結する。
+function renderCompetitionDatalist() {
+  const el = document.getElementById('competition-datalist');
+  if (!el) return;
+  const sorted = [...competitions].sort((a, b) => (a.name || '') < (b.name || '') ? -1 : 1);
+  el.innerHTML = sorted.map(c => `<option value="${String(c.name || '').replace(/"/g, '&quot;')}">`).join('');
+}
+
+// 試合/告知の保存時に呼ぶ。未登録の大会名なら自動でマスターへ追加する
+function findOrCreateCompetition(name) {
+  const n = (name || '').trim();
+  if (!n) return;
+  if (!competitions.some(c => c.name === n)) {
+    competitions.push({ id: String(Date.now()) + Math.random().toString(36).slice(2, 6), name: n });
+    renderCompetitionDatalist();
+  }
+}
+
+function renderCompetitions() {
+  const el = document.getElementById('competition-list-body');
+  if (!el) return;
+  if (competitions.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">大会が登録されていません</div><div class="empty-desc">「+追加」で登録するか、試合作成時に大会名を入力すると自動的に登録されます</div></div>`;
+    return;
+  }
+  const sorted = [...competitions].sort((a, b) => (a.name || '') < (b.name || '') ? -1 : 1);
+  el.innerHTML = sorted.map(c => {
+    const realIdx = competitions.indexOf(c);
+    const count = matches.filter(m => m.competition === c.name).length;
+    return `
+      <div class="opp-card">
+        <div class="opp-card-info">
+          <div class="opp-card-name">${c.name}</div>
+          <div class="opp-card-meta"><span>${count}試合</span></div>
+        </div>
+        <div class="opp-card-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openCompetitionModal(${realIdx})">編集</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--c-red);font-size:12px" onclick="deleteCompetition(${realIdx})">削除</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openCompetitionModal(idx = null) {
+  editingCompetitionIdx = idx;
+  const title = document.getElementById('modal-competition-title');
+  const renameNote = document.getElementById('cf-rename-note');
+  if (idx !== null && competitions[idx]) {
+    title.textContent = '大会名を編集';
+    document.getElementById('cf-name').value = competitions[idx].name || '';
+    renameNote.style.display = '';
+  } else {
+    title.textContent = '大会を追加';
+    document.getElementById('cf-name').value = '';
+    renameNote.style.display = 'none';
+  }
+  openModal('modal-competition');
+}
+
+function saveCompetitionForm() {
+  const name = document.getElementById('cf-name').value.trim();
+  if (!name) { showToast('大会名を入力してください', 'error'); return; }
+
+  if (editingCompetitionIdx !== null && competitions[editingCompetitionIdx]) {
+    const target = competitions[editingCompetitionIdx];
+    const oldName = target.name;
+    const dup = competitions.some((c, i) => i !== editingCompetitionIdx && c.name === name);
+    if (dup) { showToast('同じ名前の大会が既に登録されています', 'error'); return; }
+    if (oldName !== name) {
+      // リネーム：紐づく全試合・全予定の表記を一括で新しい名前に更新（表記ゆれの統合）
+      let updated = 0;
+      matches.forEach(m => { if (m.competition === oldName) { m.competition = name; updated++; } });
+      schedules.forEach(s => { if (s.competition === oldName) { s.competition = name; updated++; } });
+      target.name = name;
+      saveLocal();
+      closeModal('modal-competition');
+      showToast(updated > 0 ? `更新しました（${updated}件の試合・予定に反映）` : '更新しました', 'success');
+      renderCompetitions();
+      renderCompetitionDatalist();
+      editingCompetitionIdx = null;
+      return;
+    }
+  } else {
+    if (competitions.some(c => c.name === name)) { showToast('同じ名前の大会が既に登録されています', 'error'); return; }
+    competitions.push({ id: String(Date.now()), name });
+  }
+  saveLocal();
+  closeModal('modal-competition');
+  showToast(editingCompetitionIdx !== null ? '更新しました' : '追加しました', 'success');
+  renderCompetitions();
+  renderCompetitionDatalist();
+  editingCompetitionIdx = null;
+}
+
+function deleteCompetition(idx) {
+  const c = competitions[idx];
+  const count = matches.filter(m => m.competition === c.name).length;
+  const msg = count > 0
+    ? `「${c.name}」を削除しますか？既存の${count}件の試合に付いている大会名の表記はそのまま残ります。`
+    : `「${c.name}」を削除しますか？`;
+  showConfirm('大会を削除', msg, '削除する', () => {
+    competitions.splice(idx, 1);
+    saveLocal();
+    renderCompetitions();
+    renderCompetitionDatalist();
     showToast('削除しました');
   });
 }
@@ -1982,7 +2216,7 @@ async function sendPost() {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
@@ -2016,7 +2250,7 @@ async function deletePost(id) {
         await fetch(`${getFirebaseUrl(s)}.json?auth=${s.firebaseSecret}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+          body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
         });
       } catch(e) { /* silent */ }
     }
@@ -2052,6 +2286,7 @@ function renderAnnouncement() {
   }
 }
 function selectAnnSched(id) {
+  if (selectedAnnSchedId !== id) announcementSnsImage = '';
   selectedAnnSchedId = id;
   document.querySelectorAll('.ann-sched-item').forEach(el => {
     el.classList.toggle('selected', el.onclick?.toString().includes(id));
@@ -2107,6 +2342,21 @@ function renderAnnInfoCard(sc) {
   if (sc.competition) rows.push(`<div class="ann-info-row">🏆 ${sc.competition}</div>`);
   if (sc.category) rows.push(`<div class="ann-info-row"><span class="chip ${getCatBadgeClass(sc.category)}">${sc.category}</span></div>`);
   el.innerHTML = rows.length > 0 ? `<div class="ann-info-card">${rows.join('')}</div>` : '';
+}
+function renderAnnSnsStatus(sc) {
+  const slot = document.getElementById('ann-sns-slot');
+  if (!slot) return;
+  let statusEl = document.getElementById('ann-sns-status');
+  if (!statusEl) {
+    statusEl = document.createElement('div');
+    statusEl.id = 'ann-sns-status';
+    statusEl.className = 'ann-sns-status';
+    slot.appendChild(statusEl);
+  }
+  statusEl.innerHTML = announcementSnsImage
+    ? `<img src="${announcementSnsImage}" class="ann-sns-status-thumb" alt="">
+       <span class="ann-sns-status-text ann-sns-status-set">画像：設定済み</span>`
+    : `<span class="ann-sns-status-text ann-sns-status-none">画像：未設定</span>`;
 }
 function generateAnnBase(sc, extraMsg) {
   const s = getSettings();
@@ -2182,7 +2432,7 @@ async function postAnnouncement() {
     type: '試合告知',
     date: sc?.date || todayStr(),
     body,
-    image: null,
+    image: announcementSnsImage || null,
     source: 'announcement',
     published: true,
   };
@@ -2206,7 +2456,7 @@ async function postAnnouncement() {
     const res = await fetch(`${getFirebaseUrl(sconf)}.json?auth=${sconf.firebaseSecret}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players, matches, schedules, posts, opponents }),
+      body: JSON.stringify({ players, matches, schedules, posts, opponents, surveys, resetStamp: getResetStamp() }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
@@ -2226,11 +2476,36 @@ function renderResultEntry() {
   const today = todayStr();
   const pending = matches.filter(m => !m.result?.grandePosted && m.date <= today).sort((a,b) => a.date < b.date ? 1 : -1);
   const el = document.getElementById('result-entry-match-list');
-  if (pending.length === 0) {
-    el.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--c-muted);text-align:center">未公開の試合はありません</div>';
+
+  // スケジュール起点：試合日を過ぎた予定で、まだ結果登録が始まっていないもの
+  const schedPending = schedules.filter(s =>
+    s.date && s.date <= today && s.type !== '練習' && (s.opponent || '').trim() &&
+    (!s.matchId || !matches.some(m => m.id === s.matchId))
+  ).sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 10);
+
+  const schedHtml = schedPending.length === 0 ? '' : `
+    <div style="font-size:12px;font-weight:700;color:var(--c-text2);margin:2px 0 6px">📅 スケジュールの試合から登録（タップ → スコア入力へ）</div>
+    ${schedPending.map(s => `
+      <div class="match-card" onclick="startResultFromSchedule('${s.id}')">
+        <div class="match-card-top">
+          <span style="font-size:12px;color:var(--c-muted)">${fmtDate(s.date)}</span>
+          <span class="chip type-official" style="margin-left:6px">${escEmg(s.type || '試合')}</span>
+          ${s.category ? `<span style="font-size:11px;color:var(--c-muted);margin-left:6px">${escEmg(s.category)}</span>` : ''}
+        </div>
+        <div class="match-card-body">
+          <span class="match-card-opp">${escEmg(s.opponent)}</span>
+          <span class="no-result-text">結果を登録する →</span>
+        </div>
+      </div>
+    `).join('')}
+    ${pending.length ? '<div style="font-size:12px;font-weight:700;color:var(--c-text2);margin:14px 0 6px">✏️ 登録途中・未公開の試合</div>' : ''}
+  `;
+
+  if (pending.length === 0 && schedPending.length === 0) {
+    el.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--c-muted);text-align:center">未公開の試合はありません<br><span style="font-size:12px">スケジュールに試合を登録すると、試合日のあとにここへ表示されます</span></div>';
     return;
   }
-  el.innerHTML = pending.map(m => {
+  el.innerHTML = schedHtml + pending.map(m => {
     const rstr = getResultStr(m);
     const typeCls = m.type === '公式戦' ? 'type-official' : 'type-tm';
     return `
@@ -2250,6 +2525,580 @@ function renderResultEntry() {
   }).join('');
 }
 
+// ===== SURVEY =====
+function attrEsc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+
+function surveyQuestionTypeLabel(type) {
+  return { single: '単一選択', multi: '複数選択', text: '自由記述', number: '数値', schedule: '日程調整（○△×）' }[type] || type;
+}
+
+function renderSurveyList() {
+  const el = document.getElementById('survey-list-body');
+  if (!el) return;
+  if (surveys.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🗳️</div><div class="empty-title">アンケートがありません</div><div class="empty-desc">「+作成」から出欠確認や日程調整のアンケートを作成しましょう</div></div>`;
+    return;
+  }
+  const sorted = [...surveys].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const today = todayStr();
+  el.innerHTML = sorted.map(s => {
+    const idx = surveys.indexOf(s);
+    let statusLabel = '下書き', statusClass = 'badge-other';
+    if (s.published) {
+      if (s.deadline && s.deadline < today) { statusLabel = '締切'; statusClass = 'badge-match'; }
+      else { statusLabel = '公開中'; statusClass = 'badge-official'; }
+    }
+    const shareUrl = s.published ? buildSurveyShareUrl(s.id) : '';
+    return `
+      <div class="opp-card" style="flex-wrap:wrap">
+        <div class="opp-card-info">
+          <div class="opp-card-name">${s.title} <span class="sched-badge ${statusClass}" style="margin-left:6px">${statusLabel}</span></div>
+          <div class="opp-card-meta">
+            <span>${s.questions.length}問</span>
+            ${s.deadline ? `<span>期限: ${fmtDate(s.deadline)}</span>` : ''}
+            ${s.identifyRespondent ? '<span>👤 選手名で識別</span>' : ''}
+          </div>
+          ${shareUrl ? `<div class="survey-url-row"><span class="survey-url-text">${shareUrl}</span></div>` : ''}
+        </div>
+        <div class="opp-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="openSurveyResults('${s.id}')">結果を見る</button>
+          <button class="btn btn-secondary btn-sm" onclick="openSurveyModal(${idx})">編集</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--c-red);font-size:12px" onclick="deleteSurvey(${idx})">削除</button>
+        </div>
+        ${shareUrl ? `
+        <div class="opp-card-actions" style="flex-direction:row;width:100%">
+          <button class="btn btn-secondary btn-sm" onclick="copySurveyLink('${s.id}')">🔗 URLをコピー</button>
+          <button class="btn btn-secondary btn-sm" onclick="shareSurveyLink('${s.id}')">📤 送る</button>
+        </div>` : `
+        <div class="opp-card-actions" style="flex-direction:row;width:100%">
+          <span style="font-size:12px;color:var(--c-muted)">公開すると回答用のURLを共有できます</span>
+        </div>`}
+      </div>
+    `;
+  }).join('');
+}
+
+// ----- 作成・編集モーダル -----
+function openSurveyModal(idx = null) {
+  editingSurveyIdx = idx;
+  const title = document.getElementById('modal-survey-title');
+  if (idx !== null && surveys[idx]) {
+    const s = surveys[idx];
+    title.textContent = 'アンケートを編集';
+    document.getElementById('svf-title').value = s.title || '';
+    document.getElementById('svf-description').value = s.description || '';
+    document.getElementById('svf-deadline').value = s.deadline || '';
+    document.getElementById('svf-identify').checked = s.identifyRespondent !== false;
+    document.getElementById('svf-published').checked = !!s.published;
+    surveyQuestions = (s.questions || []).map(q => ({
+      id: q.id, type: q.type, label: q.label, required: q.required,
+      options: q.options ? [...q.options] : ['', ''],
+      dates: q.dates ? [...q.dates] : [''],
+    }));
+    surveyParticipants = [...(s.participants || [])];
+  } else {
+    title.textContent = 'アンケートを作成';
+    document.getElementById('svf-title').value = '';
+    document.getElementById('svf-description').value = '';
+    document.getElementById('svf-deadline').value = '';
+    document.getElementById('svf-identify').checked = true;
+    document.getElementById('svf-published').checked = true;
+    surveyQuestions = [];
+    surveyParticipants = [];
+  }
+  participantSearchQuery = '';
+  document.getElementById('sf-participant-search').value = '';
+  document.getElementById('sf-participants-wrap').hidden = !document.getElementById('svf-identify').checked;
+  renderSurveyQuestionEditor();
+  renderSurveyParticipantPicker();
+  openModal('modal-survey');
+}
+
+function renderSurveyParticipantPicker() {
+  const el = document.getElementById('sf-participants');
+  const countEl = document.getElementById('sf-participant-count');
+  if (!el) return;
+  const q = participantSearchQuery.toLowerCase();
+  const filtered = q ? players.filter(p => (p.name || '').toLowerCase().includes(q)) : players;
+  if (players.length === 0) {
+    el.innerHTML = `<div style="font-size:12.5px;color:var(--c-muted)">選手が登録されていません</div>`;
+  } else if (filtered.length === 0) {
+    el.innerHTML = `<div style="font-size:12.5px;color:var(--c-muted)">「${participantSearchQuery}」に一致する選手がいません</div>`;
+  } else {
+    el.innerHTML = filtered.map(p => {
+      const checked = surveyParticipants.includes(p.id);
+      const catLabel = p.category ? ` <span style="opacity:.55">(${p.category})</span>` : '';
+      return `<label class="cat-check-label"><input type="checkbox" class="sf-participant-check" value="${p.id}" ${checked ? 'checked' : ''} onchange="toggleSurveyParticipant('${p.id}', this.checked)"> ${p.name}${catLabel}</label>`;
+    }).join('');
+  }
+  countEl.textContent = surveyParticipants.length === 0 ? '全選手が対象' : `${surveyParticipants.length}人を選択中`;
+  renderSurveyParticipantCatChips();
+}
+function renderSurveyParticipantCatChips() {
+  const el = document.getElementById('sf-participant-cats');
+  if (!el) return;
+  const cats = [...new Set(players.map(p => p.category).filter(Boolean))];
+  if (cats.length === 0) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = cats.map(cat => {
+    const catPlayers = players.filter(p => p.category === cat).map(p => p.id);
+    const allSelected = catPlayers.length > 0 && catPlayers.every(id => surveyParticipants.includes(id));
+    return `<button type="button" class="chip chip-btn ${getCatBadgeClass(cat)} ${allSelected ? 'is-active' : ''}" onclick="toggleSurveyParticipantCategory('${cat}')">${cat}（${catPlayers.length}名）${allSelected ? ' ✓' : ''}</button>`;
+  }).join('');
+}
+function toggleSurveyParticipantCategory(cat) {
+  const catPlayers = players.filter(p => p.category === cat).map(p => p.id);
+  const allSelected = catPlayers.length > 0 && catPlayers.every(id => surveyParticipants.includes(id));
+  if (allSelected) {
+    surveyParticipants = surveyParticipants.filter(id => !catPlayers.includes(id));
+  } else {
+    catPlayers.forEach(id => { if (!surveyParticipants.includes(id)) surveyParticipants.push(id); });
+  }
+  renderSurveyParticipantPicker();
+}
+function toggleSurveyParticipant(playerId, checked) {
+  if (checked) { if (!surveyParticipants.includes(playerId)) surveyParticipants.push(playerId); }
+  else { surveyParticipants = surveyParticipants.filter(id => id !== playerId); }
+  document.getElementById('sf-participant-count').textContent = surveyParticipants.length === 0 ? '全選手が対象' : `${surveyParticipants.length}人を選択中`;
+  renderSurveyParticipantCatChips();
+}
+function selectAllSurveyParticipants() {
+  surveyParticipants = players.map(p => p.id);
+  renderSurveyParticipantPicker();
+}
+function clearSurveyParticipants() {
+  surveyParticipants = [];
+  renderSurveyParticipantPicker();
+}
+
+function renderSurveyQuestionEditor() {
+  const el = document.getElementById('sq-question-list');
+  if (!el) return;
+  if (surveyQuestions.length === 0) {
+    el.innerHTML = `<div style="font-size:12.5px;color:var(--c-muted);padding:10px 0">質問がありません。「+質問を追加」から始めましょう。</div>`;
+    return;
+  }
+  const typeList = ['single', 'multi', 'text', 'number', 'schedule'];
+  el.innerHTML = surveyQuestions.map((q, idx) => {
+    const typeOptions = typeList.map(t => `<option value="${t}" ${q.type === t ? 'selected' : ''}>${surveyQuestionTypeLabel(t)}</option>`).join('');
+
+    let extraHtml = '';
+    if (q.type === 'single' || q.type === 'multi') {
+      extraHtml = `
+        <div class="form-group">
+          <label class="form-label">選択肢</label>
+          ${q.options.map((opt, oi) => `
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <input class="form-input" type="text" value="${attrEsc(opt)}" oninput="updateSurveyOption(${idx},${oi},this.value)" placeholder="選択肢 ${oi + 1}">
+              <button class="btn-icon btn-icon-sm" style="color:var(--c-red)" onclick="removeSurveyOption(${idx},${oi})">✕</button>
+            </div>
+          `).join('')}
+          <button class="btn btn-ghost btn-sm" onclick="addSurveyOption(${idx})">+ 選択肢を追加</button>
+        </div>`;
+    } else if (q.type === 'schedule') {
+      extraHtml = `
+        <div class="form-group">
+          <label class="form-label">候補日</label>
+          ${q.dates.map((d, di) => `
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <input class="form-input" type="date" value="${d || ''}" oninput="updateSurveyDate(${idx},${di},this.value)">
+              <button class="btn-icon btn-icon-sm" style="color:var(--c-red)" onclick="removeSurveyDate(${idx},${di})">✕</button>
+            </div>
+          `).join('')}
+          <button class="btn btn-ghost btn-sm" onclick="addSurveyDate(${idx})">+ 候補日を追加</button>
+        </div>`;
+    }
+
+    return `
+      <div style="border:1px solid var(--c-border);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">質問文</label>
+            <input class="form-input" type="text" value="${attrEsc(q.label)}" oninput="updateSurveyQuestionField(${idx},'label',this.value)" placeholder="例）参加できますか？">
+          </div>
+          <div class="form-group">
+            <label class="form-label">タイプ</label>
+            <select class="form-select" onchange="updateSurveyQuestionType(${idx},this.value)">${typeOptions}</select>
+          </div>
+        </div>
+        ${extraHtml}
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--c-text2);margin-top:4px">
+          <input type="checkbox" ${q.required ? 'checked' : ''} onchange="updateSurveyQuestionField(${idx},'required',this.checked)"> 必須回答
+        </label>
+        <button class="btn btn-ghost btn-sm" style="color:var(--c-red);margin-top:8px" onclick="removeSurveyQuestion(${idx})">🗑 この質問を削除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addSurveyQuestion() {
+  surveyQuestions.push({ id: 'q' + Date.now() + Math.random().toString(36).slice(2, 6), type: 'single', label: '', required: true, options: ['', ''], dates: [''] });
+  renderSurveyQuestionEditor();
+}
+function removeSurveyQuestion(idx) { surveyQuestions.splice(idx, 1); renderSurveyQuestionEditor(); }
+function updateSurveyQuestionField(idx, field, value) { if (surveyQuestions[idx]) surveyQuestions[idx][field] = value; }
+function updateSurveyQuestionType(idx, value) {
+  const q = surveyQuestions[idx];
+  if (!q) return;
+  q.type = value;
+  if ((value === 'single' || value === 'multi') && (!q.options || q.options.length === 0)) q.options = ['', ''];
+  if (value === 'schedule' && (!q.dates || q.dates.length === 0)) q.dates = [''];
+  renderSurveyQuestionEditor();
+}
+function updateSurveyOption(qIdx, oIdx, value) { if (surveyQuestions[qIdx]) surveyQuestions[qIdx].options[oIdx] = value; }
+function addSurveyOption(qIdx) { surveyQuestions[qIdx].options.push(''); renderSurveyQuestionEditor(); }
+function removeSurveyOption(qIdx, oIdx) { surveyQuestions[qIdx].options.splice(oIdx, 1); renderSurveyQuestionEditor(); }
+function updateSurveyDate(qIdx, dIdx, value) { if (surveyQuestions[qIdx]) surveyQuestions[qIdx].dates[dIdx] = value; }
+function addSurveyDate(qIdx) { surveyQuestions[qIdx].dates.push(''); renderSurveyQuestionEditor(); }
+function removeSurveyDate(qIdx, dIdx) { surveyQuestions[qIdx].dates.splice(dIdx, 1); renderSurveyQuestionEditor(); }
+
+function saveSurveyForm() {
+  const title = document.getElementById('svf-title').value.trim();
+  if (!title) { showToast('タイトルを入力してください', 'error'); return; }
+
+  const validQuestions = surveyQuestions
+    .map(q => ({
+      id: q.id,
+      type: q.type,
+      label: (q.label || '').trim(),
+      required: !!q.required,
+      options: (q.type === 'single' || q.type === 'multi') ? q.options.map(o => (o || '').trim()).filter(Boolean) : undefined,
+      dates: (q.type === 'schedule') ? q.dates.map(d => (d || '').trim()).filter(Boolean) : undefined,
+    }))
+    .filter(q => q.label);
+
+  if (validQuestions.length === 0) { showToast('質問を1つ以上入力してください', 'error'); return; }
+  for (const q of validQuestions) {
+    if ((q.type === 'single' || q.type === 'multi') && q.options.length < 2) { showToast(`「${q.label}」の選択肢を2つ以上入力してください`, 'error'); return; }
+    if (q.type === 'schedule' && q.dates.length < 1) { showToast(`「${q.label}」の候補日を1つ以上入力してください`, 'error'); return; }
+  }
+
+  const existing = (editingSurveyIdx !== null && surveys[editingSurveyIdx]) ? surveys[editingSurveyIdx] : null;
+  const s = {
+    id: existing ? existing.id : String(Date.now()),
+    title,
+    description: document.getElementById('svf-description').value.trim(),
+    deadline: document.getElementById('svf-deadline').value || '',
+    identifyRespondent: document.getElementById('svf-identify').checked,
+    published: document.getElementById('svf-published').checked,
+    participants: [...surveyParticipants],
+    questions: validQuestions,
+    createdAt: existing ? existing.createdAt : new Date().toISOString(),
+  };
+  if (existing) {
+    surveys[editingSurveyIdx] = s;
+  } else {
+    surveys.push(s);
+  }
+  saveLocal();
+  closeModal('modal-survey');
+  showToast(existing ? '更新しました' : '作成しました', 'success');
+  renderSurveyList();
+  editingSurveyIdx = null;
+}
+
+function deleteSurvey(idx) {
+  showConfirm('アンケートを削除', `「${surveys[idx].title}」を削除しますか？回答データも失われます。`, '削除する', () => {
+    surveys.splice(idx, 1);
+    saveLocal();
+    renderSurveyList();
+    showToast('削除しました');
+  });
+}
+
+// ----- 共有リンク -----
+function buildSurveyShareUrl(id) {
+  const s = getSettings();
+  // Planner は clubs/{clubId}/ホームページ/planner/ に、回答ページは同階層の survey/ にデプロイされる想定
+  const base = location.href.replace(/planner\/(index\.html)?(\?.*)?(#.*)?$/, 'survey/');
+  return `${base}?id=${encodeURIComponent(id)}`;
+}
+function copySurveyLink(id) {
+  const url = buildSurveyShareUrl(id);
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('回答用リンクをコピーしました', 'success');
+  }).catch(() => {
+    showToast(url, 'info');
+  });
+}
+function shareSurveyLink(id) {
+  const survey = surveys.find(s => s.id === id);
+  const title = (survey && survey.title) || 'アンケート';
+  const url = buildSurveyShareUrl(id);
+  if (navigator.share) {
+    navigator.share({ title, text: `「${title}」にご回答ください`, url })
+      .catch(() => {}); // ユーザーがキャンセルした場合は何もしない
+  } else {
+    copySurveyLink(id);
+  }
+}
+
+// ----- 結果ページ -----
+function openSurveyResults(id) {
+  currentSurveyId = id;
+  pushPage('page-survey-results');
+}
+
+async function renderSurveyResults() {
+  const survey = surveys.find(s => s.id === currentSurveyId);
+  const body = document.getElementById('survey-results-body');
+  const titleEl = document.getElementById('survey-results-title');
+  if (!survey || !body) return;
+  titleEl.textContent = survey.title;
+
+  const shareUrl = buildSurveyShareUrl(survey.id);
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}`;
+
+  const s = getSettings();
+  if (!isCloudConfigured(s)) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-title">Firebase未設定です</div><div class="empty-desc">設定画面でクラウド連携を行うと回答を集計できます</div></div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="empty-state"><div class="empty-title">回答を読み込み中...</div></div>`;
+  surveyResultsLoading = true;
+  try {
+    const url = `${s.firebaseUrl}/surveys/${s.clubId}/${survey.id}/responses.json?auth=${s.firebaseSecret}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json() || {};
+    surveyResponses = Object.keys(data).map(k => Object.assign({ fbKey: k }, data[k]));
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-title">回答の取得に失敗しました</div><div class="empty-desc">${e.message}</div></div>`;
+    surveyResultsLoading = false;
+    return;
+  }
+  surveyResultsLoading = false;
+  responseSearchQuery = '';
+  expandedResponseKeys = new Set();
+  renderSurveyResultsBody();
+}
+
+function surveyTargetPlayers(survey) {
+  return (survey.participants && survey.participants.length) ? players.filter(p => survey.participants.includes(p.id)) : players;
+}
+
+function renderSurveyResultsBody() {
+  const survey = surveys.find(s => s.id === currentSurveyId);
+  const body = document.getElementById('survey-results-body');
+  if (!survey || !body) return;
+
+  const shareUrl = buildSurveyShareUrl(survey.id);
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}`;
+
+  const total = surveyResponses.length;
+  const targetPlayers = surveyTargetPlayers(survey);
+  const respondentPlayerIds = new Set(surveyResponses.filter(r => r.playerId).map(r => r.playerId));
+  const unanswered = survey.identifyRespondent ? targetPlayers.filter(p => !respondentPlayerIds.has(p.id)) : [];
+  const rate = (survey.identifyRespondent && targetPlayers.length) ? Math.round((respondentPlayerIds.size / targetPlayers.length) * 100) : null;
+
+  const questionBlocks = survey.questions.map(q => {
+    if (q.type === 'text') {
+      const answers = surveyResponses.map(r => (r.answers || {})[q.id]).filter(Boolean);
+      return `
+        <div class="form-group">
+          <div class="form-label">${q.label}</div>
+          ${answers.length ? answers.map(a => `<div style="padding:8px 10px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;margin-bottom:6px;font-size:13px">${a}</div>`).join('') : '<div style="font-size:12.5px;color:var(--c-muted)">回答はまだありません</div>'}
+        </div>`;
+    }
+    if (q.type === 'number') {
+      const nums = surveyResponses.map(r => Number((r.answers || {})[q.id])).filter(n => !isNaN(n));
+      const avg = nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : '-';
+      return `
+        <div class="form-group">
+          <div class="form-label">${q.label}</div>
+          <div style="font-size:13px">回答数: ${nums.length}件　平均: ${avg}</div>
+        </div>`;
+    }
+    if (q.type === 'schedule') {
+      const rows = q.dates.map(d => {
+        let ok = 0, maybe = 0, ng = 0;
+        surveyResponses.forEach(r => {
+          const v = ((r.answers || {})[q.id] || {})[d];
+          if (v === '○') ok++; else if (v === '△') maybe++; else if (v === '×') ng++;
+        });
+        return { d, ok, maybe, ng };
+      });
+      const maxOk = Math.max(0, ...rows.map(r => r.ok));
+      return `
+        <div class="form-group">
+          <div class="form-label">${q.label}（日程調整）</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${rows.map(r => `
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:${r.ok === maxOk && maxOk > 0 ? 'var(--c-green-bg)' : 'var(--c-surface)'};border:1px solid var(--c-border)">
+                <span style="font-size:13px;font-weight:600;min-width:110px">${fmtDate(r.d)}${r.ok === maxOk && maxOk > 0 ? ' 🏆' : ''}</span>
+                <span style="font-size:12.5px">○ ${r.ok}　△ ${r.maybe}　× ${r.ng}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+    // single / multi
+    const counts = {};
+    (q.options || []).forEach(o => counts[o] = 0);
+    surveyResponses.forEach(r => {
+      const v = (r.answers || {})[q.id];
+      const arr = Array.isArray(v) ? v : (v ? [v] : []);
+      arr.forEach(a => { if (counts[a] !== undefined) counts[a]++; });
+    });
+    const max = Math.max(1, ...Object.values(counts));
+    return `
+      <div class="form-group">
+        <div class="form-label">${q.label}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${Object.keys(counts).map(o => `
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:2px"><span>${o}</span><span>${counts[o]}件</span></div>
+              <div style="height:8px;background:var(--c-border);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(counts[o] / max) * 100}%;background:var(--c-green)"></div></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  const gradeGroups = {};
+  if (survey.identifyRespondent) {
+    targetPlayers.forEach(p => {
+      const g = p.grade || '未設定';
+      if (!gradeGroups[g]) gradeGroups[g] = { total: 0, answered: 0 };
+      gradeGroups[g].total++;
+      if (respondentPlayerIds.has(p.id)) gradeGroups[g].answered++;
+    });
+  }
+  const gradeKeys = Object.keys(gradeGroups);
+  const gradeBreakdownHtml = (survey.identifyRespondent && gradeKeys.length > 1) ? `
+    <div class="form-group">
+      <div class="form-label">学年別回答率</div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        ${gradeKeys.map(g => {
+          const gr = gradeGroups[g];
+          const pct = gr.total ? Math.round((gr.answered / gr.total) * 100) : 0;
+          return `<div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--c-border)"><span>${g}</span><span>${gr.answered}/${gr.total}人（${pct}%）</span></div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="opp-card" style="flex-wrap:wrap">
+      <div class="opp-card-info">
+        <div class="opp-card-name">回答数 ${total}件${rate !== null ? `（回答率 ${rate}%）` : ''}</div>
+        <div class="opp-card-meta"><span>共有リンクから誰でも回答できます</span></div>
+      </div>
+      <div class="opp-card-actions" style="flex-direction:row">
+        <button class="btn btn-secondary btn-sm" onclick="copySurveyLink('${survey.id}')">🔗 リンクをコピー</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportSurveyResultsCsv()">📥 CSV出力</button>
+      </div>
+    </div>
+    <div style="text-align:center;padding:14px 0">
+      <img src="${qrImg}" alt="回答用QRコード" style="border-radius:8px">
+      <div style="font-size:11px;color:var(--c-muted);margin-top:6px">スマホで読み取ってすぐ回答できます</div>
+    </div>
+    ${survey.identifyRespondent ? `
+      <div class="form-group">
+        <div class="form-label">未回答（${unanswered.length}名）</div>
+        ${unanswered.length ? `
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            ${unanswered.map(p => `<span class="sched-badge badge-other">${p.name}</span>`).join('')}
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="copyUnansweredReminder()">📋 リマインド文をコピー</button>
+        ` : '<div style="font-size:12.5px;color:var(--c-green)">全員回答済みです 🎉</div>'}
+      </div>
+    ` : ''}
+    ${gradeBreakdownHtml}
+    <div class="spacer"></div>
+    ${questionBlocks}
+    <div class="spacer"></div>
+    <div class="form-group">
+      <div class="form-label">個別回答一覧（${total}件）</div>
+      <input class="form-input" type="search" id="survey-response-search" placeholder="名前で検索..." style="margin-bottom:8px" oninput="filterSurveyResponses(this.value)">
+      <div id="survey-response-list">${buildResponseCardsHtml(survey)}</div>
+    </div>
+  `;
+}
+
+function buildResponseCardsHtml(survey) {
+  const respQuery = responseSearchQuery.toLowerCase();
+  const respFiltered = respQuery ? surveyResponses.filter(r => (r.playerName || r.respondentName || '').toLowerCase().includes(respQuery)) : surveyResponses;
+  const respSorted = [...respFiltered].sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+  if (respSorted.length === 0) return `<div style="font-size:12.5px;color:var(--c-muted)">該当する回答がありません</div>`;
+  return respSorted.map(r => {
+    const name = r.playerName || r.respondentName || '匿名';
+    const isOpen = expandedResponseKeys.has(r.fbKey);
+    const dt = r.submittedAt ? new Date(r.submittedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return `
+      <div style="border:1px solid var(--c-border);border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer" onclick="toggleResponseDetail('${r.fbKey}')">
+          <div><span style="font-weight:600;font-size:13.5px">${name}</span> <span style="font-size:11px;color:var(--c-muted)">${dt}</span></div>
+          <span style="font-size:12px;color:var(--c-muted)">${isOpen ? '閉じる ▲' : '詳細 ▼'}</span>
+        </div>
+        ${isOpen ? `
+          <div style="padding:0 12px 12px;border-top:1px solid var(--c-border)">
+            ${survey.questions.map(q => `<div style="padding-top:8px;font-size:12.5px"><span style="color:var(--c-muted)">${q.label}：</span>${fmtSurveyAnswerForDisplay(q, (r.answers || {})[q.id])}</div>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+function fmtSurveyAnswerForDisplay(q, v) {
+  if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) return '（未回答）';
+  if (q.type === 'schedule') return q.dates.map(d => `${fmtDate(d)}:${v[d] || '-'}`).join('　');
+  if (Array.isArray(v)) return v.join('、');
+  return String(v);
+}
+function renderResponseListOnly() {
+  const survey = surveys.find(s => s.id === currentSurveyId);
+  const el = document.getElementById('survey-response-list');
+  if (!survey || !el) return;
+  el.innerHTML = buildResponseCardsHtml(survey);
+}
+function toggleResponseDetail(fbKey) {
+  if (expandedResponseKeys.has(fbKey)) expandedResponseKeys.delete(fbKey);
+  else expandedResponseKeys.add(fbKey);
+  renderResponseListOnly();
+}
+function filterSurveyResponses(value) {
+  responseSearchQuery = value;
+  renderResponseListOnly();
+}
+
+function exportSurveyResultsCsv() {
+  const survey = surveys.find(s => s.id === currentSurveyId);
+  if (!survey) return;
+  const headers = ['回答者', ...survey.questions.map(q => q.label), '送信日時'];
+  const rows = surveyResponses.map(r => {
+    const name = r.playerName || r.respondentName || '匿名';
+    const cells = survey.questions.map(q => {
+      const v = (r.answers || {})[q.id];
+      if (q.type === 'schedule') return Object.entries(v || {}).map(([d, val]) => `${d}:${val}`).join(' / ');
+      if (Array.isArray(v)) return v.join(' / ');
+      return v == null ? '' : String(v);
+    });
+    return [name, ...cells, r.submittedAt || ''];
+  });
+  const csv = [headers, ...rows].map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${survey.title}_回答.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function copyUnansweredReminder() {
+  const survey = surveys.find(s => s.id === currentSurveyId);
+  if (!survey) return;
+  const respondentPlayerIds = new Set(surveyResponses.filter(r => r.playerId).map(r => r.playerId));
+  const unanswered = surveyTargetPlayers(survey).filter(p => !respondentPlayerIds.has(p.id));
+  const url = buildSurveyShareUrl(survey.id);
+  const text = `【アンケートのお願い】\n「${survey.title}」にまだご回答いただいていません。\n対象: ${unanswered.map(p => p.name).join('、')}\nこちらからご回答をお願いします → ${url}`;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('リマインド文をコピーしました', 'success');
+  }).catch(() => {
+    showToast('コピーに失敗しました', 'error');
+  });
+}
+
 // ===== SETTINGS =====
 function renderSettingsPage() {
   const s = getSettings();
@@ -2257,13 +3106,42 @@ function renderSettingsPage() {
   document.getElementById('settings-club-id').value         = s.clubId      || '';
   document.getElementById('settings-firebase-url').value    = s.firebaseUrl || '';
   document.getElementById('settings-firebase-secret').value = s.firebaseSecret || '';
+  const gasUrlEl = document.getElementById('settings-gas-url');
+  const gasKeyEl = document.getElementById('settings-gas-key');
+  if (gasUrlEl) gasUrlEl.value = s.gasUrl || '';
+  if (gasKeyEl) gasKeyEl.value = s.gasKey || '';
 }
 function saveSettingsForm() {
   const secret = document.getElementById('settings-firebase-secret').value.trim();
-  saveSettings({ firebaseSecret: secret });
+  const gasUrl = (document.getElementById('settings-gas-url')?.value || '').trim();
+  const gasKey = (document.getElementById('settings-gas-key')?.value || '').trim();
+  saveSettings({ firebaseSecret: secret, gasUrl, gasKey });
+  emergencyGroupsLoaded = false; // GAS設定が変わったらグループを取り直す
   showToast('設定を保存しました', 'success');
   // 保存後すぐにクラウドから読み込む
   if (secret) loadFromCloud();
+}
+
+// 運用開始リセット：試合・投稿・スケジュールを全削除（選手・対戦相手・アンケートは残す）
+function resetOperationalData() {
+  const summary = `試合 ${matches.length}件・ホームページ投稿 ${posts.length}件・スケジュール ${schedules.length}件`;
+  if (matches.length + posts.length + schedules.length === 0) {
+    showToast('削除できるデータがありません', 'info');
+    return;
+  }
+  if (!confirm(`${summary} を削除します。\nホームページの表示（お知らせ・試合結果・ネクストマッチ）からも消えます。\nよろしいですか？`)) return;
+  if (!confirm('この操作は取り消せません。本当に削除しますか？')) return;
+
+  matches = [];
+  posts = [];
+  schedules = [];
+  currentMatch = null;
+  selectedAnnSchedId = null;
+  // リセット印を更新 → クラウド経由で全端末に削除が伝わる（古い端末からの復活を防ぐ）
+  setResetStamp(Date.now());
+  saveLocal();
+  renderCurrentPage();
+  showToast(`${summary} を削除しました。数秒後にホームページへ反映されます`, 'success');
 }
 
 // ===== EVENT BINDINGS =====
@@ -2377,6 +3255,66 @@ function bindEvents() {
     renderOpponents();
   });
 
+  // Competitions (大会マスター)
+  document.getElementById('btn-add-competition')?.addEventListener('click', () => openCompetitionModal());
+  document.getElementById('btn-competition-save')?.addEventListener('click', saveCompetitionForm);
+  document.getElementById('btn-competition-cancel')?.addEventListener('click', () => closeModal('modal-competition'));
+  document.getElementById('btn-close-competition-modal')?.addEventListener('click', () => closeModal('modal-competition'));
+
+  // Club Stats
+  document.querySelectorAll('#stats-tab-bar .tab-btn').forEach(b => {
+    b.addEventListener('click', () => setStatsTab(b.dataset.sttab));
+  });
+  document.getElementById('btn-stats-csv')?.addEventListener('click', exportStatsCsv);
+
+  // Survey
+  document.getElementById('btn-add-survey')?.addEventListener('click', () => openSurveyModal());
+  document.getElementById('btn-survey-save')?.addEventListener('click', saveSurveyForm);
+  document.getElementById('btn-survey-cancel')?.addEventListener('click', () => closeModal('modal-survey'));
+  document.getElementById('btn-close-survey-modal')?.addEventListener('click', () => closeModal('modal-survey'));
+  document.getElementById('btn-survey-add-question')?.addEventListener('click', addSurveyQuestion);
+  document.getElementById('btn-back-survey-results')?.addEventListener('click', popPage);
+  document.getElementById('svf-identify')?.addEventListener('change', e => {
+    document.getElementById('sf-participants-wrap').hidden = !e.target.checked;
+  });
+  document.getElementById('sf-participant-search')?.addEventListener('input', e => {
+    participantSearchQuery = e.target.value;
+    renderSurveyParticipantPicker();
+  });
+  document.getElementById('btn-survey-select-all-participants')?.addEventListener('click', selectAllSurveyParticipants);
+  document.getElementById('btn-survey-clear-participants')?.addEventListener('click', clearSurveyParticipants);
+
+  // SNS画像作成
+  document.getElementById('btn-back-sns')?.addEventListener('click', popPage);
+  document.querySelectorAll('.sns-kind-btn').forEach(b => {
+    b.addEventListener('click', () => snsApplyKind(b.dataset.kind));
+  });
+  document.getElementById('btn-sns-photo')?.addEventListener('click', () => document.getElementById('sns-photo-input')?.click());
+  document.getElementById('sns-photo-input')?.addEventListener('change', e => snsLoadPhotoFile(e.target.files && e.target.files[0]));
+  document.getElementById('btn-sns-photo-clear')?.addEventListener('click', snsClearPhoto);
+  document.getElementById('sns-zoom')?.addEventListener('input', e => {
+    snsPhotoState.scale = Math.max(1, Math.min(3, Number(e.target.value) / 100));
+    snsDrawPhoto();
+  });
+  document.getElementById('btn-sns-save')?.addEventListener('click', snsExport);
+  document.getElementById('btn-close-sns-export')?.addEventListener('click', () => closeModal('modal-sns-export'));
+  document.getElementById('btn-sns-set-thumb')?.addEventListener('click', snsSetThumb);
+  snsBindFieldsOnce();
+  snsBindDrag();
+  window.addEventListener('resize', snsFitPreview);
+
+  // 食堂管理
+  document.querySelectorAll('#shokudo-tab-bar .tab-btn').forEach(b => {
+    b.addEventListener('click', () => switchShokudoTab(b.dataset.sktab));
+  });
+
+  // 緊急連絡
+  document.getElementById('btn-emergency-send')?.addEventListener('click', sendEmergencyViaGas);
+  document.getElementById('btn-emergency-groups-reload')?.addEventListener('click', () => loadEmergencyGroups(true));
+  document.getElementById('btn-emergency-mailto')?.addEventListener('click', openEmergencyMail);
+  document.getElementById('btn-copy-emergency-emails')?.addEventListener('click', copyEmergencyEmails);
+  document.getElementById('btn-copy-emergency-message')?.addEventListener('click', copyEmergencyMessage);
+
   // Player import
   document.getElementById('btn-download-template')?.addEventListener('click', downloadPlayerTemplate);
   document.getElementById('btn-import-excel')?.addEventListener('click', triggerPlayerImport);
@@ -2413,6 +3351,7 @@ function bindEvents() {
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettingsForm);
   document.getElementById('btn-load-cloud')?.addEventListener('click', loadFromCloud);
   document.getElementById('btn-save-cloud')?.addEventListener('click', saveToCloud);
+  document.getElementById('btn-reset-operational')?.addEventListener('click', resetOperationalData);
   document.getElementById('btn-sync')?.addEventListener('click', loadFromCloud);
 
   // Confirm dialog
@@ -2433,7 +3372,1240 @@ function bindEvents() {
   });
 }
 
+// ===== SNS画像メーカー（試合告知・試合結果） =====
+const SNS_TEMPLATES = [
+  { id: 'resultA', kind: 'result', name: '試合結果A', desc: 'フォト×ネイビー' },
+  { id: 'resultB', kind: 'result', name: '試合結果B', desc: '対戦カード型' },
+  { id: 'resultC', kind: 'result', name: '試合結果C', desc: 'Jクラブ風' },
+  { id: 'noticeA', kind: 'notice', name: '試合告知A', desc: 'NEXT MATCH' },
+  { id: 'noticeB', kind: 'notice', name: '試合告知B', desc: '黒×ネイビー' },
+  { id: 'noticeC', kind: 'notice', name: '試合告知C', desc: '写真重視' },
+];
+const snsData = {
+  templateId: 'resultA', kind: 'result',
+  club: localStorage.getItem('mp_sns_club') || '',
+  competition: '', opponent: '',
+  myScore: '', oppScore: '', scorers: '',
+  date: '', time: '', venue: '',
+};
+const snsPhotoState = { img: null, scale: 1, x: 0, y: 0 };
+let snsOrigin = 'home'; // 'home' | 'match' | 'schedule'
+let announcementSnsImage = '';
+let lastSnsThumb = (function () {
+  try { return localStorage.getItem('mp_sns_last_thumb') || ''; } catch (e) { return ''; }
+})();
+
+function snsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function snsFmtDate(d) {
+  if (!d) return { ymd: '', dow: '' };
+  const dt = new Date(d + 'T00:00:00');
+  if (isNaN(dt)) return { ymd: d, dow: '' };
+  const dows = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  return { ymd: `${dt.getFullYear()}.${dt.getMonth() + 1}.${dt.getDate()}`, dow: dows[dt.getDay()] };
+}
+function snsScorerLines() {
+  return String(snsData.scorers || '').split(/\n|、|,/).map(s => s.trim()).filter(Boolean);
+}
+function snsResultWord() {
+  const a = parseInt(snsData.myScore, 10), b = parseInt(snsData.oppScore, 10);
+  if (isNaN(a) || isNaN(b)) return '';
+  return a > b ? 'WIN' : a < b ? 'LOSE' : 'DRAW';
+}
+function snsBadgeHtml(cls) {
+  const w = snsResultWord();
+  if (!w) return '';
+  return `<div class="sns-badge sns-badge-${w.toLowerCase()} ${cls || ''}">${w}</div>`;
+}
+function snsScoreTxt(v) {
+  const n = parseInt(v, 10);
+  return isNaN(n) ? '0' : String(n);
+}
+function snsClubInitial(name) {
+  const c = String(name || 'C').trim().charAt(0);
+  return snsEsc(c.toUpperCase ? c.toUpperCase() : c);
+}
+function snsClubBadge() {
+  return `<div class="sns-club-badge">
+    <span class="sns-club-mark">${snsClubInitial(snsData.club)}</span>
+    <span class="sns-club-name">${snsEsc(snsData.club)}</span>
+  </div>`;
+}
+function snsPhotoBlock() {
+  if (snsPhotoState.img) {
+    return `<div class="snsP"><canvas class="sns-photo-cv" width="1080" height="1080"></canvas></div>`;
+  }
+  return `<div class="snsP snsP-ph"></div>`;
+}
+
+const SNS_TPL = {
+  resultA(d) {
+    const f = snsFmtDate(d.date);
+    const lines = snsScorerLines();
+    return `
+      ${snsPhotoBlock()}
+      <div class="ovl ovl-navy"></div>
+      <div class="tplA-frame"></div>
+      <div class="tplA-top">
+        ${snsClubBadge()}
+        <div class="tplA-comp">${snsEsc(d.competition)}</div>
+      </div>
+      <div class="tplA-center">
+        <div class="tplA-ft">FULL TIME</div>
+        <div class="tplA-score sns-num">${snsScoreTxt(d.myScore)}<span class="tplA-dash">-</span>${snsScoreTxt(d.oppScore)}</div>
+        <div class="tplA-teams">${snsEsc(d.club)}<span class="tplA-vs">vs</span>${snsEsc(d.opponent)}</div>
+        ${snsBadgeHtml('tplA-badge')}
+      </div>
+      <div class="tplA-bottom">
+        <div class="tplA-scorers">${lines.map(s => `<span>⚽ ${snsEsc(s)}</span>`).join('')}</div>
+        <div class="tplA-date sns-num">${snsEsc(f.ymd)}${f.dow ? ` <em>${f.dow}</em>` : ''}</div>
+      </div>`;
+  },
+  resultB(d) {
+    const f = snsFmtDate(d.date);
+    const lines = snsScorerLines();
+    return `
+      ${snsPhotoBlock()}
+      <div class="ovl"></div>
+      <div class="tplB-stripe"></div>
+      <div class="tplB-comp">${snsEsc(d.competition)}</div>
+      <div class="tplB-row">
+        <div class="tplB-team"><small>HOME</small>${snsEsc(d.club)}</div>
+        <div class="tplB-scorebox">
+          <div class="tplB-ft">FULL TIME</div>
+          <div class="tplB-score sns-num">${snsScoreTxt(d.myScore)}<span>-</span>${snsScoreTxt(d.oppScore)}</div>
+          ${snsBadgeHtml('tplB-badge')}
+        </div>
+        <div class="tplB-team"><small>AWAY</small>${snsEsc(d.opponent)}</div>
+      </div>
+      <div class="tplB-bottom">
+        ${lines.length ? `<div class="tplB-scorers">${lines.map(s => `<span>⚽ ${snsEsc(s)}</span>`).join('')}</div>` : ''}
+        <div class="tplB-date sns-num">${snsEsc(f.ymd)}${f.dow ? ` ${f.dow}` : ''}</div>
+      </div>`;
+  },
+  resultC(d) {
+    const f = snsFmtDate(d.date);
+    const lines = snsScorerLines();
+    return `
+      ${snsPhotoBlock()}
+      <div class="tplC-photo-ovl"></div>
+      <div class="tplC-chip">${snsEsc(d.competition)}</div>
+      ${snsBadgeHtml('tplC-badge')}
+      <div class="tplC-panel">
+        <div class="tplC-panel-row">
+          <div class="tplC-score sns-num">${snsScoreTxt(d.myScore)}<span>-</span>${snsScoreTxt(d.oppScore)}</div>
+          <div class="tplC-info">
+            <div class="tplC-teams">${snsEsc(d.club)}<em>vs</em>${snsEsc(d.opponent)}</div>
+            ${lines.length ? `<div class="tplC-scorers">⚽ ${lines.map(snsEsc).join('　')}</div>` : ''}
+          </div>
+        </div>
+        <div class="tplC-foot">
+          <span><b>MATCH RESULT</b></span>
+          <span class="sns-num">${snsEsc(f.ymd)}${f.dow ? ` ${f.dow}` : ''}</span>
+        </div>
+      </div>`;
+  },
+  noticeA(d) {
+    const f = snsFmtDate(d.date);
+    return `
+      ${snsPhotoBlock()}
+      <div class="ovl"></div>
+      <div class="tplNA-head">
+        <div class="tplNA-next">NEXT <b>MATCH</b></div>
+        <div class="tplNA-comp">${snsEsc(d.competition)}</div>
+      </div>
+      <div class="tplNA-card">
+        <div class="tplNA-team">${snsEsc(d.club)}</div>
+        <div class="tplNA-vs">VS</div>
+        <div class="tplNA-team">${snsEsc(d.opponent)}</div>
+      </div>
+      <div class="tplNA-info">
+        <div class="tplNA-date sns-num">${snsEsc(f.ymd)}${f.dow ? `<em>${f.dow}</em>` : ''}</div>
+        ${d.time ? `<div class="tplNA-ko sns-num">KICK OFF ${snsEsc(d.time)}</div>` : ''}
+        ${d.venue ? `<div class="tplNA-venue">📍 ${snsEsc(d.venue)}</div>` : ''}
+      </div>`;
+  },
+  noticeB(d) {
+    const f = snsFmtDate(d.date);
+    const photo = snsPhotoState.img
+      ? `<div class="tplNB-photo"><div class="snsP"><canvas class="sns-photo-cv" width="1080" height="1080"></canvas></div><div class="tplNB-photo-ovl"></div></div>`
+      : '';
+    return `
+      <div class="tplNB-deco"></div>
+      <div class="tplNB-line"></div>
+      <div class="tplNB-body">
+        <div class="tplNB-next">NEXT<br><b>MATCH</b></div>
+        <div class="tplNB-comp">${snsEsc(d.competition)}</div>
+        ${photo}
+        <div class="tplNB-vs">${snsEsc(d.club)}<em>VS</em>${snsEsc(d.opponent)}</div>
+        <div class="tplNB-grid">
+          <div class="tplNB-cell"><div class="lab">DATE</div><div class="val sns-num">${snsEsc(f.ymd)}${f.dow ? `<em>${f.dow}</em>` : ''}</div></div>
+          ${d.time ? `<div class="tplNB-cell"><div class="lab">KICK OFF</div><div class="val sns-num">${snsEsc(d.time)}</div></div>` : ''}
+          ${d.venue ? `<div class="tplNB-cell"><div class="lab">VENUE</div><div class="val">${snsEsc(d.venue)}</div></div>` : ''}
+        </div>
+      </div>`;
+  },
+  noticeC(d) {
+    const f = snsFmtDate(d.date);
+    return `
+      ${snsPhotoBlock()}
+      <div class="ovl"></div>
+      <div class="tplNC-club">${snsClubBadge()}</div>
+      <div class="tplNC-comp">${snsEsc(d.competition)}</div>
+      <div class="tplNC-bottom">
+        <div class="tplNC-next">NEXT<br><b>MATCH</b></div>
+        <div class="tplNC-opp"><em>vs</em>${snsEsc(d.opponent)}</div>
+        <div class="tplNC-meta">
+          <span class="sns-num">${snsEsc(f.ymd)}${f.dow ? ` ${f.dow}` : ''}</span>
+          ${d.time ? `<span><b>KO</b> <span class="sns-num">${snsEsc(d.time)}</span></span>` : ''}
+          ${d.venue ? `<span>📍 ${snsEsc(d.venue)}</span>` : ''}
+        </div>
+      </div>`;
+  },
+};
+
+// ----- 写真処理（読み込み→自動リサイズ圧縮→正方形クロップ描画） -----
+function snsLoadPhotoFile(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const max = 2200;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (Math.max(iw, ih) > max) {
+      const r = max / Math.max(iw, ih);
+      const c = document.createElement('canvas');
+      c.width = Math.round(iw * r); c.height = Math.round(ih * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const im2 = new Image();
+      im2.onload = () => snsSetPhoto(im2);
+      im2.src = c.toDataURL('image/jpeg', 0.9);
+    } else {
+      snsSetPhoto(img);
+    }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); showToast('写真を読み込めませんでした', 'error'); };
+  img.src = url;
+}
+function snsSetPhoto(img) {
+  snsPhotoState.img = img;
+  snsPhotoState.scale = 1; snsPhotoState.x = 0; snsPhotoState.y = 0;
+  document.getElementById('sns-photo-tools')?.classList.remove('hidden');
+  document.getElementById('btn-sns-photo-clear')?.classList.remove('hidden');
+  const z = document.getElementById('sns-zoom'); if (z) z.value = 100;
+  snsUpdateDragMode();
+  renderSnsCanvas();
+}
+function snsClearPhoto() {
+  snsPhotoState.img = null;
+  document.getElementById('sns-photo-tools')?.classList.add('hidden');
+  document.getElementById('btn-sns-photo-clear')?.classList.add('hidden');
+  const inp = document.getElementById('sns-photo-input'); if (inp) inp.value = '';
+  snsUpdateDragMode();
+  renderSnsCanvas();
+}
+function snsPaintPhoto(ctx) {
+  const img = snsPhotoState.img; if (!img) return;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const base = Math.max(1080 / iw, 1080 / ih);
+  const s = base * snsPhotoState.scale;
+  const dw = iw * s, dh = ih * s;
+  const maxX = (dw - 1080) / 2, maxY = (dh - 1080) / 2;
+  snsPhotoState.x = Math.max(-maxX, Math.min(maxX, snsPhotoState.x));
+  snsPhotoState.y = Math.max(-maxY, Math.min(maxY, snsPhotoState.y));
+  const dx = (1080 - dw) / 2 + snsPhotoState.x;
+  const dy = (1080 - dh) / 2 + snsPhotoState.y;
+  ctx.clearRect(0, 0, 1080, 1080);
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+function snsDrawPhoto(root) {
+  const scope = root || document.getElementById('sns-canvas');
+  if (!scope || !snsPhotoState.img) return;
+  scope.querySelectorAll('.sns-photo-cv').forEach(cv => snsPaintPhoto(cv.getContext('2d')));
+}
+
+// ----- プレビュー描画 -----
+function snsBuildHtml() {
+  const fn = SNS_TPL[snsData.templateId] || SNS_TPL.resultA;
+  return fn(snsData);
+}
+function renderSnsCanvas() {
+  const cv = document.getElementById('sns-canvas'); if (!cv) return;
+  cv.className = 'sns-canvas tpl-' + snsData.templateId;
+  cv.innerHTML = snsBuildHtml();
+  snsDrawPhoto(cv);
+}
+function snsFitPreview() {
+  const frame = document.getElementById('sns-preview-frame'), stage = document.getElementById('sns-stage');
+  if (!frame || !stage) return;
+  const w = frame.clientWidth || 1;
+  stage.style.transform = `scale(${w / 1080})`;
+}
+function snsUpdateDragMode() {
+  const frame = document.getElementById('sns-preview-frame'); if (!frame) return;
+  frame.style.touchAction = snsPhotoState.img ? 'none' : 'auto';
+}
+
+// ----- ドラッグ＆ピンチで写真位置・ズーム調整 -----
+function snsBindDrag() {
+  const frame = document.getElementById('sns-preview-frame'); if (!frame) return;
+  const pointers = new Map();
+  let pinchStart = null;
+
+  frame.addEventListener('pointerdown', e => {
+    if (!snsPhotoState.img) return;
+    frame.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale: snsPhotoState.scale };
+    }
+    e.preventDefault();
+  });
+  frame.addEventListener('pointermove', e => {
+    if (!snsPhotoState.img || !pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pvScale = (frame.clientWidth || 1080) / 1080;
+
+    if (pointers.size === 1) {
+      snsPhotoState.x += (e.clientX - prev.x) / pvScale;
+      snsPhotoState.y += (e.clientY - prev.y) / pvScale;
+      snsDrawPhoto();
+    } else if (pointers.size === 2 && pinchStart) {
+      const [a, b] = [...pointers.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      snsPhotoState.scale = Math.max(1, Math.min(3, pinchStart.scale * dist / pinchStart.dist));
+      const z = document.getElementById('sns-zoom'); if (z) z.value = Math.round(snsPhotoState.scale * 100);
+      snsDrawPhoto();
+    }
+  });
+  const release = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStart = null;
+  };
+  frame.addEventListener('pointerup', release);
+  frame.addEventListener('pointercancel', release);
+}
+
+// ----- テンプレート選択UI -----
+function snsRenderTemplateRow() {
+  const row = document.getElementById('sns-template-row'); if (!row) return;
+  row.innerHTML = SNS_TEMPLATES.filter(t => t.kind === snsData.kind).map(t => `
+    <button type="button" class="sns-tpl-card${t.id === snsData.templateId ? ' active' : ''}" onclick="snsSelectTemplate('${t.id}')">
+      <div class="sns-tpl-thumb thumb-${t.id}"></div>
+      <div class="sns-tpl-name">${snsEsc(t.name)}</div>
+      <div class="sns-tpl-desc">${snsEsc(t.desc)}</div>
+    </button>
+  `).join('');
+}
+function snsSelectTemplate(id) {
+  snsData.templateId = id;
+  snsRenderTemplateRow();
+  renderSnsCanvas();
+}
+function snsApplyKind(kind) {
+  snsData.kind = kind;
+  const cur = SNS_TEMPLATES.find(t => t.id === snsData.templateId);
+  if (!cur || cur.kind !== kind) {
+    snsData.templateId = (SNS_TEMPLATES.find(t => t.kind === kind) || {}).id || 'resultA';
+  }
+  document.querySelectorAll('.sns-kind-btn').forEach(b => b.classList.toggle('active', b.dataset.kind === kind));
+  document.querySelectorAll('.sns-f-result').forEach(n => n.classList.toggle('hidden', kind !== 'result'));
+  document.querySelectorAll('.sns-f-notice').forEach(n => n.classList.toggle('hidden', kind !== 'notice'));
+  snsRenderTemplateRow();
+  renderSnsCanvas();
+}
+
+// ----- フォーム⇔データ同期 -----
+const SNS_FIELDS = [
+  ['sns-competition', 'competition'], ['sns-opponent', 'opponent'],
+  ['sns-myscore', 'myScore'], ['sns-oppscore', 'oppScore'],
+  ['sns-scorers', 'scorers'], ['sns-date', 'date'],
+  ['sns-time', 'time'], ['sns-venue', 'venue'], ['sns-club', 'club'],
+];
+function snsSyncFields() {
+  if (!snsData.club) snsData.club = getSettings().clubName || '';
+  SNS_FIELDS.forEach(([id, key]) => {
+    const n = document.getElementById(id);
+    if (n) n.value = snsData[key] ?? '';
+  });
+}
+function snsBindFieldsOnce() {
+  SNS_FIELDS.forEach(([id, key]) => {
+    const n = document.getElementById(id); if (!n) return;
+    n.addEventListener('input', () => {
+      snsData[key] = n.value;
+      if (key === 'club') localStorage.setItem('mp_sns_club', n.value);
+      renderSnsCanvas();
+    });
+  });
+}
+
+// ----- 画面表示 -----
+function renderSnsPage() {
+  snsApplyKind(snsData.kind);
+  snsSyncFields();
+  renderSnsCanvas();
+  requestAnimationFrame(snsFitPreview);
+}
+
+function openSnsFromMatch(m) {
+  if (!m) { snsOrigin = 'home'; pushPage('page-sns'); return; }
+  const r = m.result || {};
+  const hasResult = r.myScore !== undefined && r.myScore !== null;
+  snsData.kind = hasResult ? 'result' : 'notice';
+  snsData.templateId = hasResult ? 'resultA' : 'noticeA';
+  snsData.competition = m.competition || m.type || '';
+  snsData.opponent = m.opponent || '';
+  snsData.date = m.date || '';
+  snsData.venue = m.venue || '';
+  if (hasResult) {
+    snsData.myScore = r.myScore;
+    snsData.oppScore = r.oppScore ?? '';
+    const count = {};
+    (r.goals || []).forEach(g => { if (g.scorer) count[g.scorer] = (count[g.scorer] || 0) + 1; });
+    snsData.scorers = Object.entries(count)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, c]) => c > 1 ? `${name} ${c}点` : name)
+      .join('\n');
+  }
+  snsOrigin = 'match';
+  pushPage('page-sns');
+}
+function openSnsFromSchedule(sc) {
+  if (!sc) { snsOrigin = 'home'; pushPage('page-sns'); return; }
+  snsData.kind = 'notice';
+  snsData.templateId = 'noticeA';
+  snsData.competition = sc.competition || sc.type || '';
+  snsData.opponent = sc.opponent || '';
+  snsData.date = sc.date || '';
+  snsData.time = sc.time || '';
+  snsData.venue = sc.venue || '';
+  snsOrigin = 'schedule';
+  pushPage('page-sns');
+}
+
+// ----- PNG書き出し（html2canvas / 1080×1080） -----
+async function snsExport() {
+  if (typeof html2canvas === 'undefined') {
+    showToast('画像ライブラリの読み込みに失敗しました。通信環境をご確認ください', 'error');
+    return;
+  }
+  const btn = document.getElementById('btn-sns-save');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 画像を生成中...'; }
+  try {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;left:-2000px;top:0;width:1080px;height:1080px;z-index:-1;';
+    const node = document.createElement('div');
+    node.className = 'sns-canvas tpl-' + snsData.templateId;
+    node.innerHTML = snsBuildHtml();
+    wrap.appendChild(node);
+    document.body.appendChild(wrap);
+    snsDrawPhoto(node);
+
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+
+    const canvas = await html2canvas(node, {
+      width: 1080, height: 1080, scale: 1,
+      backgroundColor: '#0c1430', useCORS: true, logging: false,
+    });
+    wrap.remove();
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const thumb = snsMakeThumb(canvas);
+    lastSnsThumb = thumb;
+    try { localStorage.setItem('mp_sns_last_thumb', thumb); } catch (e) {}
+
+    const f = snsFmtDate(snsData.date);
+    const kindLabel = snsData.kind === 'result' ? '結果' : '告知';
+    const clubTag = (getSettings().clubName || 'club').replace(/\s/g, '');
+    const fname = `${clubTag}_${kindLabel}_vs${(snsData.opponent || '').replace(/\s/g, '')}_${(f.ymd || 'image').replace(/\./g, '-')}.png`;
+
+    const imgEl = document.getElementById('sns-export-img');
+    const dlEl = document.getElementById('sns-export-dl');
+    if (imgEl) imgEl.src = dataUrl;
+    if (dlEl) { dlEl.href = dataUrl; dlEl.download = fname; }
+    openModal('modal-sns-export');
+    showToast('画像を生成しました', 'success');
+  } catch (e) {
+    console.error('SNS export error:', e);
+    showToast('画像の生成に失敗しました', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 画像を保存（1080×1080 PNG）'; }
+  }
+}
+function snsMakeThumb(srcCanvas) {
+  const SIZE = 900;
+  const c = document.createElement('canvas');
+  c.width = SIZE; c.height = SIZE;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0c1430';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.drawImage(srcCanvas, 0, 0, SIZE, SIZE);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function snsSetThumb() {
+  if (!lastSnsThumb) { showToast('先に画像を生成してください', 'error'); return; }
+  if (snsOrigin === 'match') {
+    const imgInput = document.getElementById('result-image');
+    if (imgInput) imgInput.value = lastSnsThumb;
+    showToast('結果フォームの画像欄に設定しました。「結果を保存」を押すと記事に反映されます', 'success');
+  } else if (snsOrigin === 'schedule') {
+    announcementSnsImage = lastSnsThumb;
+    showToast('告知記事の画像に設定しました', 'success');
+    const sc = schedules.find(s => s.id === selectedAnnSchedId);
+    if (sc) {
+      renderAnnSnsStatus(sc);
+      snsEnsureCtaButton(document.getElementById('ann-sns-slot'), 'btn-ann-sns', '📸 画像を変更する', '', () => openSnsFromSchedule(sc));
+    }
+  } else {
+    showToast('画像を保存しました', 'info');
+  }
+}
+
+// ----- 既存画面へのCTA追加（ラップして追記・既存処理は変更しない） -----
+function snsEnsureCtaButton(container, id, label, note, onClick) {
+  if (!container) return;
+  let btn = document.getElementById(id);
+  if (!btn) {
+    const div = document.createElement('div');
+    div.className = 'sns-cta-wrap';
+    div.innerHTML = `<button type="button" id="${id}" class="btn-sns-make">${label}</button>` +
+      (note ? `<div class="sns-result-cta-note">${note}</div>` : '');
+    container.appendChild(div);
+    btn = document.getElementById(id);
+  } else {
+    btn.textContent = label;
+  }
+  btn.onclick = onClick;
+}
+const _snsOrigRenderResult = renderResult;
+renderResult = function () {
+  _snsOrigRenderResult.apply(this, arguments);
+  try {
+    if (!currentMatch) return;
+    snsEnsureCtaButton(
+      document.querySelector('#tab-result .result-section'),
+      'btn-result-sns', '📸 この試合のSNS画像を作成',
+      '結果を保存してから押すと、スコア・得点者・日付が自動入力されます',
+      () => openSnsFromMatch(currentMatch)
+    );
+  } catch (e) { console.error('SNS CTA(result) error:', e); }
+};
+const _snsOrigRenderPublish = renderPublish;
+renderPublish = function () {
+  _snsOrigRenderPublish.apply(this, arguments);
+  try {
+    if (!currentMatch || !currentMatch.result || currentMatch.result.myScore == null) return;
+    snsEnsureCtaButton(
+      document.getElementById('tab-publish'),
+      'btn-hp-sns', '📸 SNS画像を作成', '',
+      () => openSnsFromMatch(currentMatch)
+    );
+  } catch (e) { console.error('SNS CTA(publish) error:', e); }
+};
+const _snsOrigSelectAnnSched = selectAnnSched;
+selectAnnSched = function (id) {
+  _snsOrigSelectAnnSched.apply(this, arguments);
+  try {
+    const sc = schedules.find(s => s.id === id);
+    if (!sc) return;
+    snsEnsureCtaButton(
+      document.getElementById('ann-sns-slot'),
+      'btn-ann-sns', announcementSnsImage ? '📸 画像を変更する' : '📸 この試合のSNS画像を作成', '',
+      () => openSnsFromSchedule(sc)
+    );
+    renderAnnSnsStatus(sc);
+  } catch (e) { console.error('SNS CTA(ann) error:', e); }
+};
+
+// ===== 緊急連絡 =====
+let emergencyCats = new Set();
+let emergencyGroups = [];            // Gmail連絡先グループ {id, name, count}
+let emergencySelGroups = new Set();  // 選択中グループid
+let emergencyGroupsLoaded = false;
+
+function escEmg(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// GAS（Google Apps Script）呼び出し共通処理
+async function gasCall(action, payload = {}) {
+  const s = getSettings();
+  const res = await fetch(s.gasUrl, {
+    method: 'POST',
+    body: JSON.stringify({ key: s.gasKey, action, ...payload }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || '不明なエラー');
+  return data;
+}
+
+async function loadEmergencyGroups(force = false) {
+  const el = document.getElementById('emergency-group-picker');
+  if (!el) return;
+  if (emergencyGroupsLoaded && !force) { renderEmergencyGroupPicker(); return; }
+  el.innerHTML = '<div style="font-size:12px;color:var(--c-muted)">⏳ Gmailからグループを読み込み中…</div>';
+  try {
+    const data = await gasCall('groups');
+    emergencyGroups = data.groups || [];
+    emergencyGroupsLoaded = true;
+    emergencySelGroups = new Set([...emergencySelGroups].filter(id => emergencyGroups.some(g => g.id === id)));
+    renderEmergencyGroupPicker();
+  } catch (e) {
+    el.innerHTML = `<div style="font-size:12px;color:#dc2626">グループの読み込みに失敗しました：${escEmg(e.message)}<br>設定画面のGAS URL・送信キーをご確認ください。</div>`;
+  }
+}
+function renderEmergencyGroupPicker() {
+  const el = document.getElementById('emergency-group-picker');
+  if (!el) return;
+  if (emergencyGroups.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--c-muted)">Google連絡先にグループ（ラベル）がありません</div>';
+    return;
+  }
+  el.innerHTML = emergencyGroups.map(g => `
+    <label class="cat-check-label"><input type="checkbox" class="emergency-group-check" value="${escEmg(g.id)}" ${emergencySelGroups.has(g.id) ? 'checked' : ''} onchange="toggleEmergencyGroup(this.value, this.checked)"> ${escEmg(g.name)}（${g.count}名）</label>
+  `).join('');
+}
+function toggleEmergencyGroup(id, checked) {
+  if (checked) emergencySelGroups.add(id); else emergencySelGroups.delete(id);
+}
+async function sendEmergencyViaGas() {
+  const s = getSettings();
+  if (!isGasConfigured(s)) { showToast('設定画面でGmail連携（GAS）を設定してください', 'error'); return; }
+  if (emergencySelGroups.size === 0) { showToast('送信先グループを選択してください', 'error'); return; }
+  const subject = (document.getElementById('emergency-subject')?.value || '').trim() || '緊急連絡';
+  const body = (document.getElementById('emergency-message')?.value || '').trim();
+  if (!body) { showToast('メッセージを入力してください', 'error'); return; }
+
+  const sel = emergencyGroups.filter(g => emergencySelGroups.has(g.id));
+  const names = sel.map(g => `「${g.name}」`).join('・');
+  const total = sel.reduce((n, g) => n + (g.count || 0), 0);
+  if (!confirm(`${names}（計${total}名）へ緊急連絡メールを一斉送信します。よろしいですか？\n\n件名：${subject}`)) return;
+
+  const btn = document.getElementById('btn-emergency-send');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 送信中…しばらくお待ちください'; }
+  try {
+    const r = await gasCall('send', { groupIds: [...emergencySelGroups], subject, body, senderName: `${s.clubName} 緊急連絡` });
+    showToast(`✅ ${r.sent}件のアドレスへ送信しました（控えが自分宛にも届きます）`, 'success');
+  } catch (e) {
+    showToast(`送信に失敗しました：${e.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 Gmailから自動送信（BCC）'; }
+  }
+}
+const EMERGENCY_TEMPLATES = [
+  { label: '天候による中止', text: '本日の練習/試合は悪天候のため中止といたします。今後の予定は改めてご連絡いたします。' },
+  { label: '解散時間の変更', text: '天候急変のため、本日の解散時間を予定より早め、◯時◯分に変更いたします。お迎えの調整をお願いいたします。' },
+  { label: 'バス遅延・到着遅れ', text: '遠征バスが渋滞に巻き込まれており、到着が◯時◯分頃になる見込みです。ご心配をおかけしますが今しばらくお待ちください。' },
+  { label: '集合場所・時間の変更', text: '集合場所／時間を変更いたします。変更後の集合：◯◯　◯時◯分。ご確認をお願いいたします。' },
+];
+
+function renderEmergencyPage() {
+  emergencyCats = new Set();
+  emergencySelGroups = new Set();
+  const msgEl = document.getElementById('emergency-message');
+  if (msgEl) msgEl.value = '';
+  const s = getSettings();
+  const subjEl = document.getElementById('emergency-subject');
+  if (subjEl) subjEl.value = '本日の活動につきまして';
+
+  // Gmailグループ（GAS連携）ブロックの表示切り替え
+  const gasOn = isGasConfigured(s);
+  const groupBlock = document.getElementById('emergency-group-block');
+  const gasHint = document.getElementById('emergency-gas-hint');
+  const sendBtn = document.getElementById('btn-emergency-send');
+  if (groupBlock) groupBlock.style.display = gasOn ? '' : 'none';
+  if (gasHint) gasHint.style.display = gasOn ? 'none' : '';
+  if (sendBtn) sendBtn.style.display = gasOn ? '' : 'none';
+  if (gasOn) loadEmergencyGroups();
+
+  renderEmergencyCatPicker();
+  renderEmergencyRecipients();
+  renderEmergencyTemplateButtons();
+}
+function renderEmergencyCatPicker() {
+  const el = document.getElementById('emergency-cat-picker');
+  if (!el) return;
+  el.innerHTML = CATEGORY_OPTIONS.map(cat => `
+    <label class="cat-check-label"><input type="checkbox" class="emergency-cat-check" value="${cat}" ${emergencyCats.has(cat) ? 'checked' : ''} onchange="toggleEmergencyCat('${cat}', this.checked)"> ${cat}</label>
+  `).join('');
+}
+function toggleEmergencyCat(cat, checked) {
+  if (checked) emergencyCats.add(cat); else emergencyCats.delete(cat);
+  renderEmergencyRecipients();
+}
+function emergencyTargetPlayers() {
+  if (emergencyCats.size === 0) return [];
+  return players.filter(p => emergencyCats.has(p.category));
+}
+function renderEmergencyRecipients() {
+  const el = document.getElementById('emergency-recipients-summary');
+  if (!el) return;
+  if (emergencyCats.size === 0) {
+    el.innerHTML = `<div style="font-size:12.5px;color:var(--c-muted)">カテゴリーを選択してください</div>`;
+    return;
+  }
+  const targets = emergencyTargetPlayers();
+  const withEmail = targets.filter(p => (p.guardianEmail || '').trim());
+  const withoutEmail = targets.filter(p => !(p.guardianEmail || '').trim());
+  el.innerHTML = `
+    <div style="font-size:13px;margin-bottom:8px"><b>${targets.length}名</b>が対象（うちメール登録 <b style="color:var(--c-green)">${withEmail.length}名</b>）</div>
+    ${withoutEmail.length ? `
+      <div style="font-size:12px;color:var(--c-muted);margin-bottom:4px">メール未登録（${withoutEmail.length}名）：</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${withoutEmail.map(p => `<span class="sched-badge badge-other">${p.name}</span>`).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+function renderEmergencyTemplateButtons() {
+  const el = document.getElementById('emergency-templates');
+  if (!el) return;
+  el.innerHTML = EMERGENCY_TEMPLATES.map((t, i) => `<button type="button" class="btn btn-secondary btn-sm" onclick="applyEmergencyTemplate(${i})">${t.label}</button>`).join('');
+}
+// どのテンプレートにも共通で入れる書き出しと結び
+const EMERGENCY_HEADER = '保護者の皆様\nいつもサポートをありがとうございます。\n\n';
+const EMERGENCY_FOOTER = '\n\n以上、よろしくお願いいたします。';
+function applyEmergencyTemplate(i) {
+  const el = document.getElementById('emergency-message');
+  if (el) el.value = EMERGENCY_HEADER + EMERGENCY_TEMPLATES[i].text + EMERGENCY_FOOTER;
+}
+function openEmergencyMail() {
+  if (emergencyCats.size === 0) { showToast('対象カテゴリーを選択してください', 'error'); return; }
+  const emails = emergencyTargetPlayers().map(p => (p.guardianEmail || '').trim()).filter(Boolean);
+  if (emails.length === 0) { showToast('対象者にメールアドレスが登録されていません', 'error'); return; }
+  const subject = (document.getElementById('emergency-subject')?.value || '').trim() || '緊急連絡';
+  const body = (document.getElementById('emergency-message')?.value || '').trim();
+  if (!body) { showToast('メッセージを入力してください', 'error'); return; }
+
+  // 重複アドレスを除去（兄弟で同じ保護者メールのケース）
+  const uniqueEmails = [...new Set(emails.map(e => e.toLowerCase()))];
+  const url = `mailto:?bcc=${encodeURIComponent(uniqueEmails.join(','))}`
+    + `&subject=${encodeURIComponent(subject)}`
+    + `&body=${encodeURIComponent(body)}`;
+
+  // 宛先が多すぎるとメールアプリ側でURLが切れる場合がある
+  if (url.length > 1800) {
+    showToast('宛先が多いため開けない場合があります。その際は下のコピーをご利用ください', 'info');
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast(`メールアプリを起動しました（BCC ${uniqueEmails.length}件）`, 'success');
+}
+function copyEmergencyEmails() {
+  if (emergencyCats.size === 0) { showToast('対象カテゴリーを選択してください', 'error'); return; }
+  const emails = emergencyTargetPlayers().map(p => (p.guardianEmail || '').trim()).filter(Boolean);
+  if (emails.length === 0) { showToast('対象者にメールアドレスが登録されていません', 'error'); return; }
+  navigator.clipboard.writeText(emails.join(', ')).then(() => {
+    showToast(`${emails.length}件のメールアドレスをコピーしました（BCCに貼り付けてください）`, 'success');
+  }).catch(() => {
+    showToast('コピーに失敗しました', 'error');
+  });
+}
+function copyEmergencyMessage() {
+  const text = (document.getElementById('emergency-message')?.value || '').trim();
+  if (!text) { showToast('メッセージを入力してください', 'error'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('メッセージをコピーしました', 'success');
+  }).catch(() => {
+    showToast('コピーに失敗しました', 'error');
+  });
+}
+
+// ===== 食堂管理 =====
+// mp-config.js に shokudo: { name, price, categories } を設定したクラブだけ有効になる
+function shokudoCfg() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.shokudo || null;
+}
+function isShokudoEnabled() { return !!shokudoCfg(); }
+
+// ===== クラブスタッツ・大会マスター（プレミアムプラン限定） =====
+// mp-config.js に stats: { enabled: true } を設定したクラブだけ有効になる
+function statsCfg() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.stats || null;
+}
+function isStatsEnabled() { return !!(statsCfg() && statsCfg().enabled); }
+function shokudoName()  { return (shokudoCfg() || {}).name  || '食堂管理'; }
+function shokudoPrice() { return (shokudoCfg() || {}).price || 900; }
+function shokudoCats()  { return (shokudoCfg() || {}).categories || ['U15', 'U14', 'U13']; }
+// カテゴリーが未入力でも学年（中1〜中3）からジュニアユースを自動判定する
+function skCategoryOf(p) {
+  if (p.category && shokudoCats().includes(p.category)) return p.category;
+  const g = String(p.grade || '');
+  if (g.indexOf('中1') === 0) return 'U13';
+  if (g.indexOf('中2') === 0) return 'U14';
+  if (g.indexOf('中3') === 0) return 'U15';
+  return null;
+}
+function skIsGK(p) {
+  return p.main === 'GK' || p.mainGroup === 'GK' || p.position === 'GK';
+}
+function shokudoPlayers() {
+  return players.filter(p => !!skCategoryOf(p))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+}
+function skFindPlayer(id) { return players.find(p => p.id === id); }
+function skPlayerName(id) { const p = skFindPlayer(id); return p ? p.name : '(退団選手)'; }
+
+function renderShokudoPage() {
+  document.querySelectorAll('#shokudo-tab-bar .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.sktab === shokudoTab);
+  });
+  ['input', 'billing', 'rank', 'bmi'].forEach(t => {
+    const el = document.getElementById(`shokudo-pane-${t}`);
+    if (el) el.style.display = (t === shokudoTab) ? '' : 'none';
+  });
+  if (shokudoTab === 'input')   renderShokudoInput();
+  if (shokudoTab === 'billing') renderShokudoBilling();
+  if (shokudoTab === 'rank')    renderShokudoRank();
+  if (shokudoTab === 'bmi')     renderShokudoBmiPane();
+}
+function switchShokudoTab(t) { shokudoTab = t; renderShokudoPage(); }
+
+// --- 入力タブ ---
+function renderShokudoInput() {
+  const el = document.getElementById('shokudo-pane-input');
+  if (!el) return;
+  const target = shokudoSessions.find(s => s.id === editingShokudoId);
+  const dateVal = target ? target.date : new Date().toISOString().split('T')[0];
+  const menuVal = target ? (target.menu || '') : '';
+  const cups = target ? (target.cups || {}) : {};
+  const list = shokudoPlayers();
+
+  el.innerHTML = `
+    <div class="form-group">
+      <div class="form-label">${target ? '✏️ 記録を編集' : '📝 食事を記録'}</div>
+      <div class="form-row-2">
+        <div class="form-group"><label class="form-label">日付</label><input class="form-input" type="date" id="sk-date" value="${escEmg(dateVal)}"></div>
+        <div class="form-group"><label class="form-label">メニュー</label><input class="form-input" type="text" id="sk-menu" value="${escEmg(menuVal)}" placeholder="例: ご飯・チキンステーキ・味噌汁"></div>
+      </div>
+      <div class="form-label" style="margin-top:4px">参加選手と杯数（食べたごはんの杯数を入力）</div>
+      ${list.length === 0 ? '<div style="font-size:12.5px;color:var(--c-muted)">対象カテゴリーの選手が登録されていません（選手・スタッフ画面で登録してください）</div>' : `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px">
+        ${list.map(p => `
+          <label style="display:flex;align-items:center;gap:6px;background:var(--c-surface2,rgba(0,0,0,.04));border-radius:8px;padding:7px 10px;font-size:13px">
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escEmg(p.name)}</span>
+            <input type="number" min="0" step="0.5" class="form-input" style="width:58px;padding:4px 6px;font-size:13px" id="sk-cup-${escEmg(p.id)}" value="${cups[p.id] != null ? cups[p.id] : ''}" placeholder="杯">
+          </label>
+        `).join('')}
+      </div>`}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveShokudoSession()">${target ? '💾 更新する' : '＋ 記録する'}</button>
+        ${target ? '<button class="btn btn-secondary" onclick="cancelShokudoEdit()">キャンセル</button>' : ''}
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:18px">
+      <div class="form-label">📋 記録一覧（新しい順）</div>
+      ${shokudoSessions.length === 0 ? '<div style="font-size:12.5px;color:var(--c-muted)">まだ記録がありません</div>' : `
+      <div>
+        ${[...shokudoSessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 30).map(s => {
+          const n = Object.keys(s.cups || {}).length;
+          const total = Object.values(s.cups || {}).reduce((a, b) => a + (+b || 0), 0);
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--c-border,rgba(0,0,0,.08));font-size:13px">
+            <b style="min-width:86px">${escEmg(s.date || '')}</b>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text2)">${escEmg(s.menu || '（メニュー未記入）')}</span>
+            <span style="white-space:nowrap">${n}名 / ${total}杯</span>
+            <button class="btn btn-secondary btn-sm" onclick="editShokudoSession('${escEmg(s.id)}')">編集</button>
+            <button class="btn btn-secondary btn-sm" onclick="deleteShokudoSession('${escEmg(s.id)}')">🗑</button>
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>`;
+}
+function saveShokudoSession() {
+  const date = (document.getElementById('sk-date')?.value || '').trim();
+  const menu = (document.getElementById('sk-menu')?.value || '').trim();
+  if (!date) { showToast('日付を入力してください', 'error'); return; }
+  const cups = {};
+  shokudoPlayers().forEach(p => {
+    const v = parseFloat(document.getElementById(`sk-cup-${p.id}`)?.value);
+    if (!isNaN(v) && v > 0) cups[p.id] = v;
+  });
+  if (Object.keys(cups).length === 0) { showToast('参加選手の杯数を1人以上入力してください', 'error'); return; }
+  if (editingShokudoId) {
+    const s = shokudoSessions.find(x => x.id === editingShokudoId);
+    if (s) { s.date = date; s.menu = menu; s.cups = cups; }
+    editingShokudoId = null;
+    showToast('記録を更新しました', 'success');
+  } else {
+    shokudoSessions.push({ id: Date.now().toString(), date, menu, cups });
+    showToast('記録しました', 'success');
+  }
+  saveLocal();
+  renderShokudoInput();
+}
+function editShokudoSession(id) { editingShokudoId = id; renderShokudoInput(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function cancelShokudoEdit() { editingShokudoId = null; renderShokudoInput(); }
+function deleteShokudoSession(id) {
+  const s = shokudoSessions.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`${s.date} の記録を削除しますか？`)) return;
+  shokudoSessions = shokudoSessions.filter(x => x.id !== id);
+  if (editingShokudoId === id) editingShokudoId = null;
+  saveLocal();
+  renderShokudoInput();
+  showToast('削除しました', 'success');
+}
+
+// --- 出席・請求タブ ---
+function shokudoMonths() {
+  const set = new Set(shokudoSessions.map(s => (s.date || '').slice(0, 7)).filter(Boolean));
+  return [...set].sort().reverse();
+}
+function renderShokudoBilling() {
+  const el = document.getElementById('shokudo-pane-billing');
+  if (!el) return;
+  const months = shokudoMonths();
+  if (months.length === 0) { el.innerHTML = '<div style="font-size:12.5px;color:var(--c-muted)">まだ記録がありません</div>'; return; }
+  const sel = el.querySelector('#sk-month')?.value;
+  const month = months.includes(sel) ? sel : months[0];
+  const sessions = shokudoSessions.filter(s => (s.date || '').startsWith(month)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const price = shokudoPrice();
+  const rows = shokudoPlayers().map(p => {
+    let attended = 0, cups = 0;
+    sessions.forEach(s => { const c = (s.cups || {})[p.id]; if (c != null && c > 0) { attended++; cups += +c; } });
+    return { p, attended, cups, amount: attended * price };
+  }).filter(r => r.attended > 0 || true);
+  const totalAmount = rows.reduce((a, r) => a + r.amount, 0);
+  el.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">対象月</label>
+      <select class="form-select" id="sk-month" onchange="renderShokudoBilling()">
+        ${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${m.replace('-', '年')}月</option>`).join('')}
+      </select>
+    </div>
+    <div style="font-size:12.5px;color:var(--c-muted);margin-bottom:8px">開催 ${sessions.length}回 ／ 1食 ${price.toLocaleString()}円</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:2px solid var(--c-border,rgba(0,0,0,.15));text-align:left">
+          <th style="padding:7px 6px">選手</th><th style="padding:7px 6px;text-align:center">参加</th><th style="padding:7px 6px;text-align:center">杯数</th><th style="padding:7px 6px;text-align:right">請求額</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr style="border-bottom:1px solid var(--c-border,rgba(0,0,0,.07))">
+            <td style="padding:7px 6px">${escEmg(r.p.name)}</td>
+            <td style="padding:7px 6px;text-align:center">${r.attended}回</td>
+            <td style="padding:7px 6px;text-align:center">${r.cups}杯</td>
+            <td style="padding:7px 6px;text-align:right;font-weight:700">${r.amount.toLocaleString()}円</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="border-top:2px solid var(--c-border,rgba(0,0,0,.15))">
+          <td style="padding:8px 6px;font-weight:700">合計</td><td></td><td></td>
+          <td style="padding:8px 6px;text-align:right;font-weight:700">${totalAmount.toLocaleString()}円</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+// --- ランキングタブ ---
+function renderShokudoRank() {
+  const el = document.getElementById('shokudo-pane-rank');
+  if (!el) return;
+  const stats = {};
+  shokudoSessions.forEach(s => {
+    Object.entries(s.cups || {}).forEach(([pid, c]) => {
+      if (!stats[pid]) stats[pid] = { count: 0, cups: 0 };
+      if (+c > 0) { stats[pid].count++; stats[pid].cups += +c; }
+    });
+  });
+  const metric = shokudoRankMetric;
+  const rows = Object.entries(stats)
+    .map(([pid, st]) => ({ name: skPlayerName(pid), ...st }))
+    .sort((a, b) => metric === 'cups' ? (b.cups - a.cups) : (b.count - a.count));
+  el.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">集計項目（全期間）</label>
+      <select class="form-select" onchange="shokudoRankMetric=this.value;renderShokudoRank()">
+        <option value="count" ${metric === 'count' ? 'selected' : ''}>参加回数</option>
+        <option value="cups" ${metric === 'cups' ? 'selected' : ''}>ごはん杯数</option>
+      </select>
+    </div>
+    ${rows.length === 0 ? '<div style="font-size:12.5px;color:var(--c-muted)">まだ記録がありません</div>' : rows.map((r, i) => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:1px solid var(--c-border,rgba(0,0,0,.07));font-size:14px">
+        <b style="width:34px;font-size:16px">${i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + '位'}</b>
+        <span style="flex:1">${escEmg(r.name)}</span>
+        <b>${metric === 'cups' ? r.cups + '杯' : r.count + '回'}</b>
+        <span style="color:var(--c-muted);font-size:12px">${metric === 'cups' ? r.count + '回' : r.cups + '杯'}</span>
+      </div>`).join('')}`;
+}
+
+// --- BMIタブ ---
+const SHOKUDO_BMI_TARGET    = { U13: 19.5, U14: 20.5, U15: 21.0 };
+const SHOKUDO_BMI_TARGET_GK = { U13: 20.5, U14: 21.5, U15: 21.5 };
+function skBmiTarget(p) {
+  if (!p) return null;
+  const cat = skCategoryOf(p);
+  const t = skIsGK(p) ? SHOKUDO_BMI_TARGET_GK[cat] : SHOKUDO_BMI_TARGET[cat];
+  return t || null;
+}
+function renderShokudoBmiPane() {
+  const el = document.getElementById('shokudo-pane-bmi');
+  if (!el) return;
+  const list = shokudoPlayers();
+  const detailSel = el.querySelector('#sk-bmi-detail')?.value || '';
+  const latest = {};
+  [...shokudoBmi].sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(r => { latest[r.playerId] = r; });
+  el.innerHTML = `
+    <div class="form-group">
+      <div class="form-label">📏 BMI計測を記録</div>
+      <div class="form-row-2">
+        <div class="form-group"><label class="form-label">選手</label>
+          <select class="form-select" id="sk-bmi-player">${list.map(p => `<option value="${escEmg(p.id)}">${escEmg(p.name)}（${escEmg(skCategoryOf(p) || '')}）</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">計測日</label><input class="form-input" type="date" id="sk-bmi-date" value="${new Date().toISOString().split('T')[0]}"></div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group"><label class="form-label">身長（cm）</label><input class="form-input" type="number" step="0.1" id="sk-bmi-h" placeholder="160.5"></div>
+        <div class="form-group"><label class="form-label">体重（kg）</label><input class="form-input" type="number" step="0.1" id="sk-bmi-w" placeholder="48.2"></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="addShokudoBmi()">＋ 記録する</button>
+    </div>
+    <div class="form-group" style="margin-top:18px">
+      <div class="form-label">📋 最新BMI一覧（目標＝カテゴリー別基準値）</div>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:2px solid var(--c-border,rgba(0,0,0,.15));text-align:left">
+          <th style="padding:7px 6px">選手</th><th style="padding:7px 6px;text-align:center">最新BMI</th><th style="padding:7px 6px;text-align:center">目標</th><th style="padding:7px 6px;text-align:center">判定</th><th style="padding:7px 6px">計測日</th>
+        </tr></thead>
+        <tbody>
+        ${list.map(p => {
+          const r = latest[p.id];
+          const t = skBmiTarget(p);
+          const ok = r && t && r.bmi >= t;
+          return `<tr style="border-bottom:1px solid var(--c-border,rgba(0,0,0,.07))">
+            <td style="padding:7px 6px">${escEmg(p.name)}</td>
+            <td style="padding:7px 6px;text-align:center;font-weight:700">${r ? r.bmi.toFixed(1) : '−'}</td>
+            <td style="padding:7px 6px;text-align:center">${t != null ? t.toFixed(1) : '−'}</td>
+            <td style="padding:7px 6px;text-align:center">${r && t ? (ok ? '<span style="color:var(--c-green,#16a34a);font-weight:700">達成</span>' : `<span style="color:#d97706;font-weight:700">あと${(t - r.bmi).toFixed(1)}</span>`) : '−'}</td>
+            <td style="padding:7px 6px;color:var(--c-muted)">${r ? escEmg(r.date || '') : '−'}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:18px">
+      <div class="form-label">📊 選手別の推移</div>
+      <select class="form-select" id="sk-bmi-detail" onchange="renderShokudoBmiPane()">
+        <option value="">-- 選手を選択 --</option>
+        ${list.map(p => `<option value="${escEmg(p.id)}" ${detailSel === p.id ? 'selected' : ''}>${escEmg(p.name)}</option>`).join('')}
+      </select>
+      <div style="margin-top:10px">
+      ${detailSel ? ([...shokudoBmi].filter(r => r.playerId === detailSel).sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => `
+        <div style="display:flex;gap:12px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--c-border,rgba(0,0,0,.07));font-size:13px">
+          <b style="min-width:86px">${escEmg(r.date || '')}</b>
+          <span>身長 ${r.height}cm ／ 体重 ${r.weight}kg</span>
+          <b style="margin-left:auto">BMI ${r.bmi.toFixed(1)}</b>
+          <button class="btn btn-secondary btn-sm" onclick="deleteShokudoBmi('${escEmg(r.id)}')">🗑</button>
+        </div>`).join('') || '<div style="font-size:12.5px;color:var(--c-muted)">記録がありません</div>') : ''}
+      </div>
+    </div>`;
+}
+function addShokudoBmi() {
+  const pid = document.getElementById('sk-bmi-player')?.value;
+  const date = document.getElementById('sk-bmi-date')?.value;
+  const h = parseFloat(document.getElementById('sk-bmi-h')?.value);
+  const w = parseFloat(document.getElementById('sk-bmi-w')?.value);
+  if (!pid || !date) { showToast('選手と計測日を入力してください', 'error'); return; }
+  if (isNaN(h) || isNaN(w) || h <= 0 || w <= 0) { showToast('身長・体重を正しく入力してください', 'error'); return; }
+  const bmi = w / Math.pow(h / 100, 2);
+  shokudoBmi.push({ id: Date.now().toString(), playerId: pid, date, height: h, weight: w, bmi: Math.round(bmi * 10) / 10 });
+  saveLocal();
+  renderShokudoBmiPane();
+  showToast(`記録しました（BMI ${bmi.toFixed(1)}）`, 'success');
+}
+function deleteShokudoBmi(id) {
+  if (!confirm('このBMI記録を削除しますか？')) return;
+  shokudoBmi = shokudoBmi.filter(r => r.id !== id);
+  saveLocal();
+  renderShokudoBmiPane();
+}
+
 // ===== INIT =====
+// ----- CSV共通ヘルパー -----
+// BOM付きUTF-8のCSVをダウンロードする（選手/対戦相手テンプレDL・アンケート結果CSVと同じ生成方式を共通化）
+function downloadCsv(filename, rows) {
+  const csv = rows.map(row => row.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ----- クラブスタッツ：集計 -----
+// 非公開試合（result.publish===false）は除外する。HP側の得点ランキング（matches.html）と同じ扱い
+function statsTargetMatches() {
+  return matches.filter(m => m.result && m.result.publish !== false && m.result.myScore != null && m.result.oppScore != null);
+}
+
+function summarizeGroup(list) {
+  let win = 0, draw = 0, lose = 0, gf = 0, ga = 0;
+  list.forEach(m => {
+    const my = m.result.myScore, op = m.result.oppScore;
+    gf += my; ga += op;
+    if (my > op) win++; else if (my < op) lose++; else draw++;
+  });
+  const played = list.length;
+  const rate = played ? Math.round((win / played) * 100) : 0;
+  return { played, win, draw, lose, gf, ga, diff: gf - ga, rate };
+}
+
+// 大会別サマリー：大会マスターに登録が無い試合は「未登録」としてまとめる
+function computeCompetitionStats() {
+  const list = statsTargetMatches();
+  const groups = {};
+  list.forEach(m => {
+    const key = (m.competition || '').trim() || '（大会名未登録）';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
+  });
+  return Object.keys(groups)
+    .map(name => ({ name, ...summarizeGroup(groups[name]) }))
+    .sort((a, b) => b.played - a.played);
+}
+
+function computeCategoryStats() {
+  const list = statsTargetMatches();
+  const groups = {};
+  list.forEach(m => {
+    const key = m.category || '（カテゴリー未設定）';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
+  });
+  const order = ['U15','U14','U13','U12','U11','U10','U9','U8'];
+  return Object.keys(groups)
+    .map(name => ({ name, ...summarizeGroup(groups[name]) }))
+    .sort((a, b) => {
+      const ia = order.indexOf(a.name), ib = order.indexOf(b.name);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+}
+
+// 得点・アシストランキング：全選手を集計（HP側は各カテゴリー1名のみだが、Planner側はコーチ専用なので全員出す）
+function computeScorerStats() {
+  const list = statsTargetMatches();
+  const goals = {}, assists = {};
+  list.forEach(m => {
+    const arr = m.result.goals;
+    if (!Array.isArray(arr)) return;
+    arr.forEach(g => {
+      const scorer = (g.scorer || '').trim();
+      if (scorer) goals[scorer] = (goals[scorer] || 0) + 1;
+      const assist = (g.assist || '').trim();
+      if (assist) assists[assist] = (assists[assist] || 0) + 1;
+    });
+  });
+  const names = new Set([...Object.keys(goals), ...Object.keys(assists)]);
+  return [...names]
+    .map(name => ({ name, goals: goals[name] || 0, assists: assists[name] || 0 }))
+    .sort((a, b) => (b.goals - a.goals) || (b.assists - a.assists));
+}
+
+// ----- クラブスタッツ：描画 -----
+function renderStatsPage() {
+  document.querySelectorAll('#stats-tab-bar .tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sttab === statsTab);
+  });
+  ['competition', 'category', 'scorer'].forEach(t => {
+    const pane = document.getElementById(`stats-pane-${t}`);
+    if (pane) pane.style.display = (t === statsTab) ? '' : 'none';
+  });
+  if (statsTab === 'competition') renderStatsCompetitionPane();
+  if (statsTab === 'category')    renderStatsCategoryPane();
+  if (statsTab === 'scorer')      renderStatsScorerPane();
+}
+function setStatsTab(tab) {
+  statsTab = tab;
+  renderStatsPage();
+}
+
+function statSummaryCardsHtml(rows) {
+  if (rows.length === 0) {
+    return `<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">まだ結果が登録されている試合がありません</div></div>`;
+  }
+  return `<div class="stat-summary-grid">` + rows.map(r => `
+    <div class="stat-summary-card">
+      <div class="stat-summary-name">${r.name}</div>
+      <div class="stat-summary-rate">${r.rate}<span class="stat-summary-rate-unit">%</span></div>
+      <div class="stat-summary-wdl">
+        <span class="stat-w">${r.win}勝</span><span class="stat-d">${r.draw}分</span><span class="stat-l">${r.lose}敗</span>
+      </div>
+      <div class="stat-summary-sub">${r.played}試合 / 得失点 ${r.gf}-${r.ga}（${r.diff >= 0 ? '+' : ''}${r.diff}）</div>
+    </div>
+  `).join('') + `</div>`;
+}
+
+function renderStatsCompetitionPane() {
+  const el = document.getElementById('stats-pane-competition');
+  if (!el) return;
+  el.innerHTML = statSummaryCardsHtml(computeCompetitionStats());
+}
+function renderStatsCategoryPane() {
+  const el = document.getElementById('stats-pane-category');
+  if (!el) return;
+  el.innerHTML = statSummaryCardsHtml(computeCategoryStats());
+}
+function renderStatsScorerPane() {
+  const el = document.getElementById('stats-pane-scorer');
+  if (!el) return;
+  const rows = computeScorerStats();
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚽</div><div class="empty-title">まだ得点記録がありません</div></div>`;
+    return;
+  }
+  const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+  el.innerHTML = `
+    <table class="rank-table">
+      <thead><tr><th></th><th>選手名</th><th>得点</th><th>アシスト</th></tr></thead>
+      <tbody>
+        ${rows.map((r, i) => `
+          <tr class="${i < 3 ? 'rank-row-top' : ''}">
+            <td class="rank-medal">${medal(i)}</td>
+            <td>${r.name}</td>
+            <td class="rank-num">${r.goals}</td>
+            <td class="rank-num">${r.assists}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function exportStatsCsv() {
+  if (statsTab === 'competition') {
+    const rows = computeCompetitionStats();
+    downloadCsv('大会別サマリー.csv', [
+      ['大会名', '試合数', '勝', '分', '敗', '勝率(%)', '得点', '失点', '得失点差'],
+      ...rows.map(r => [r.name, r.played, r.win, r.draw, r.lose, r.rate, r.gf, r.ga, r.diff]),
+    ]);
+  } else if (statsTab === 'category') {
+    const rows = computeCategoryStats();
+    downloadCsv('カテゴリー別サマリー.csv', [
+      ['カテゴリー', '試合数', '勝', '分', '敗', '勝率(%)', '得点', '失点', '得失点差'],
+      ...rows.map(r => [r.name, r.played, r.win, r.draw, r.lose, r.rate, r.gf, r.ga, r.diff]),
+    ]);
+  } else {
+    const rows = computeScorerStats();
+    downloadCsv('得点・アシストランキング.csv', [
+      ['順位', '選手名', '得点', 'アシスト'],
+      ...rows.map((r, i) => [i + 1, r.name, r.goals, r.assists]),
+    ]);
+  }
+}
+
 function initApp() {
   loadLocal();
   bindEvents();
@@ -2446,6 +4618,31 @@ function initApp() {
   document.getElementById('sidebar-avatar').textContent = (s.clubName||'?')[0];
   const subEl = document.getElementById('sidebar-club-sub');
   if (subEl) subEl.textContent = s.clubId || '';
+
+  // 食堂管理：mp-config に shokudo 設定があるクラブだけ表示
+  if (isShokudoEnabled()) {
+    document.querySelectorAll('.shokudo-nav-label').forEach(el => { el.textContent = shokudoName(); });
+  } else {
+    document.querySelectorAll('[data-nav="page-shokudo"]').forEach(el => { el.style.display = 'none'; });
+  }
+
+  // クラブスタッツ・大会マスター：mp-config に stats: { enabled: true } があるクラブ（プレミアム）だけ表示
+  if (!isStatsEnabled()) {
+    document.querySelectorAll('[data-nav="page-stats"], [data-nav="page-competitions"]').forEach(el => { el.style.display = 'none'; });
+  }
+  renderCompetitionDatalist();
+
+  // 試合管理を使わないクラブ向け（mp-config: hideMatchManagement: true）
+  // メニューから隠すだけで機能・データは残す。結果登録はスケジュール起点でできる
+  if (typeof MP_CONFIG !== 'undefined' && MP_CONFIG.hideMatchManagement) {
+    document.querySelectorAll('[data-nav="page-matches"]').forEach(el => { el.style.display = 'none'; });
+    const bnav = document.querySelector('.bnav-item[data-bnav="page-matches"]');
+    if (bnav) {
+      bnav.dataset.bnav = 'page-result-entry';
+      bnav.innerHTML = '<span class="bnav-icon">🏆</span><span class="bnav-label">試合結果</span>';
+      bottomNavPages.push('page-result-entry');
+    }
+  }
 
   // Auto-load from cloud if configured
   if (isCloudConfigured(s)) {

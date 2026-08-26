@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>選手・スタッフ紹介 | FC ALASERIO</title>
+  <link rel="icon" href="assets/logo.png">
+  <meta name="description" content="FC ALASERIOの選手・スタッフ紹介。ジュニアユース(U-15)の選手と指導スタッフをご紹介します。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/alaserio.css?v=20260826b">
+</head>
+<body>
+
+  <!-- ユーティリティバー -->
+  <div class="ut">
+    <div class="ut-inner">
+      <a href="tel:0552847717" class="ut-tel">TEL 055-284-7717</a>
+      <a href="http://wing-2015.com" target="_blank" rel="noopener">WING FUTSAL CLUB</a>
+      <a href="https://www.instagram.com/alaserio_2019/" target="_blank" rel="noopener">Instagram</a>
+    </div>
+  </div>
+
+  <!-- ヘッダー -->
+  <header class="gh">
+    <div class="gh-inner">
+      <a href="index.html" class="gh-logo">
+        <img id="club-logo" src="assets/logo.png" alt="FC ALASERIO エンブレム">
+        <span class="gh-logo-fallback" id="logo-abbr">A</span>
+        <span class="gh-logo-text">
+          <span class="gh-logo-sub">MINAMI ALPS</span>
+          <span class="gh-logo-name">FC ALASERIO</span>
+        </span>
+      </a>
+      <nav class="gh-nav">
+        <a href="news.html"><span class="n-en">News</span><span class="n-ja">お知らせ</span></a>
+        <a href="matches.html"><span class="n-en">Match</span><span class="n-ja">試合情報</span></a>
+        <a href="team.html"><span class="n-en">Team</span><span class="n-ja">選手・スタッフ</span></a>
+        <a href="club.html"><span class="n-en">Club</span><span class="n-ja">クラブを知る</span></a>
+        <a href="join.html"><span class="n-en">Join us</span><span class="n-ja">入会・体験</span></a>
+        <a href="documents.html"><span class="n-en">Docs</span><span class="n-ja">各種書類</span></a>
+        <a href="shop/"><span class="n-en">Shop</span><span class="n-ja">アイテムショップ</span></a>
+        <a href="contact.html"><span class="n-en">Contact</span><span class="n-ja">お問い合わせ</span></a>
+      </nav>
+      <div class="gh-actions">
+        <a href="join.html#apply" class="gh-cta">Trial<small>体験申込</small></a>
+        <button class="gh-burger" id="hamburger-btn" aria-label="メニューを開く"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- モバイルメニュー -->
+  <nav class="m-nav" id="mobile-nav">
+    <button class="m-nav-close" id="mobile-nav-close" aria-label="メニューを閉じる">✕</button>
+    <a class="m-link" href="news.html"><span class="n-en">NEWS</span><span class="n-ja">お知らせ</span></a>
+    <a class="m-link" href="matches.html"><span class="n-en">MATCH</span><span class="n-ja">試合情報</span></a>
+    <a class="m-link" href="team.html"><span class="n-en">TEAM</span><span class="n-ja">選手・スタッフ</span></a>
+    <a class="m-link" href="club.html"><span class="n-en">CLUB</span><span class="n-ja">クラブを知る</span></a>
+    <a class="m-link" href="join.html"><span class="n-en">JOIN US</span><span class="n-ja">入会・体験</span></a>
+    <a class="m-link" href="documents.html"><span class="n-en">DOCS</span><span class="n-ja">各種書類</span></a>
+    <a class="m-link" href="shop/"><span class="n-en">SHOP</span><span class="n-ja">アイテムショップ</span></a>
+    <a class="m-link" href="contact.html"><span class="n-en">CONTACT</span><span class="n-ja">お問い合わせ</span></a>
+    <div class="m-nav-ctas">
+      <a href="join.html#apply" class="m-cta-trial">体験申込</a>
+    </div>
+  </nav>
+
+  <!-- ページヒーロー -->
+  <section class="page-hero">
+    <div class="page-hero-inner">
+      <div class="ph-en">PLAYERS &amp; STAFF</div>
+      <div class="ph-ja">選手・スタッフ紹介</div>
+    </div>
+  </section>
+  <div class="breadcrumb"><div class="breadcrumb-inner"><a href="index.html">TOP</a><span>›</span><span>選手・スタッフ紹介</span></div></div>
+
+  <main class="page-body">
+    <div class="container">
+
+      <!-- 選手一覧 (Match Planner 連携) -->
+      <div class="sec-head">
+        <span class="sec-en" style="font-size:26px;">PLAYERS</span>
+        <span class="sec-ja">選手一覧</span>
+      </div>
+
+      <!-- 並び順 -->
+      <div class="sort-bar">
+        <span class="sort-label">並び順</span>
+        <div class="filter-bar" id="sort-filter" style="margin-bottom:0;">
+          <button class="filter-btn on" data-sort="number">背番号順</button>
+          <button class="filter-btn" data-sort="grade">学年順</button>
+        </div>
+      </div>
+
+      <!-- ポジション別グループ -->
+      <div id="pos-groups"><p class="no-data">読み込み中...</p></div>
+
+      <!-- スタッフ紹介 -->
+      <section class="club-sec" style="margin-top:56px;">
+        <div class="club-sec-title"><span class="c-en">STAFF</span><span class="c-ja">スタッフ紹介</span></div>
+        <div class="catinfo-grid">
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">PRESIDENT</div>
+            <div class="catinfo-name">髙部 聖</div>
+            <div class="catinfo-target">代表</div>
+            <dl class="catinfo-dl">
+              <dt>経歴</dt><dd>韮崎高校／東洋大学<br>2003年 東京ヴェルディ<br>2005年 ロアッソ熊本</dd>
+              <dt>指導歴</dt><dd>WING FUTSAL CLUB<br>甲府昭和高校サッカー部</dd>
+              <dt>資格</dt><dd>日本サッカー協会C級ライセンス／幼児体育指導者2級／ライフキネティックトレーナー／日本サッカー協会公認審判3級</dd>
+            </dl>
+          </div>
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">MANAGER</div>
+            <div class="catinfo-name">望月 雅貴</div>
+            <div class="catinfo-target">監督</div>
+            <dl class="catinfo-dl">
+              <dt>経歴</dt><dd>帝京第三高校</dd>
+              <dt>指導歴</dt><dd>CSCルーデンス（3年間）<br>峡中トレセン（1年間）<br>WING FUTSAL CLUB<br>駿台甲府高校サッカー部</dd>
+              <dt>資格</dt><dd>日本サッカー協会B級ライセンス／フットサルC級ライセンス／ライフキネティックトレーナー／日本サッカー協会公認審判3級</dd>
+            </dl>
+          </div>
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">COACH</div>
+            <div class="catinfo-name">関口 仁</div>
+            <div class="catinfo-target">コーチ</div>
+            <dl class="catinfo-dl">
+              <dt>経歴</dt><dd>2005年 山梨県フットサル優秀選手<br>2012年 山梨県社会人SPリーグ 千塚クラブ所属</dd>
+              <dt>指導歴</dt><dd>WING FUTSAL CLUB</dd>
+              <dt>資格</dt><dd>日本サッカー協会公認審判4級</dd>
+            </dl>
+          </div>
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">GK COACH</div>
+            <div class="catinfo-name">小松 拓也</div>
+            <div class="catinfo-target">GKコーチ</div>
+            <dl class="catinfo-dl">
+              <dt>経歴</dt><dd>韮崎工業高校</dd>
+              <dt>指導歴</dt><dd>若草バイキングU-12 コーチ<br>4種トレセンコーチ</dd>
+              <dt>資格</dt><dd>日本サッカー協会公認審判3級</dd>
+            </dl>
+          </div>
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">COACH</div>
+            <div class="catinfo-name">石川 健太</div>
+            <div class="catinfo-target">コーチ</div>
+            <dl class="catinfo-dl">
+              <dt>経歴</dt><dd>農林高校</dd>
+              <dt>指導歴</dt><dd>横浜Fマリノススクールコーチ<br>農林高校</dd>
+              <dt>資格</dt><dd>日本サッカー協会公認審判3級</dd>
+            </dl>
+          </div>
+
+          <div class="catinfo-card">
+            <div class="catinfo-en">TRAINER</div>
+            <div class="catinfo-name">三枝 直人</div>
+            <div class="catinfo-target">トレーナー</div>
+            <dl class="catinfo-dl">
+              <dt>担当</dt><dd>選手のコンディショニング・ケア</dd>
+            </dl>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- 選手詳細モーダル -->
+  <div class="player-modal" id="player-modal">
+    <div class="pm-box">
+      <div class="pm-photo" id="modal-photo"></div>
+      <div class="pm-body">
+        <div class="pm-name" id="modal-name"></div>
+        <div class="pm-name-en" id="modal-nameEn"></div>
+        <div class="pm-meta">
+          <div><div class="lb">NO.</div><div class="vl" id="modal-number">—</div></div>
+          <div><div class="lb">POSITION</div><div class="vl" id="modal-position">—</div></div>
+          <div><div class="lb">GRADE</div><div class="vl" id="modal-grade">—</div></div>
+        </div>
+        <button class="pm-close" id="modal-close">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <footer class="gf">
+    <div class="gf-top">
+      <div class="gf-top-inner">
+        <div class="gf-brand">
+          <img src="assets/logo.png" alt="FC ALASERIO">
+          <div>
+            <div class="gf-brand-name" id="footer-club-name">FC ALASERIO</div>
+            <div class="gf-brand-sub" id="footer-address">山梨県南アルプス市在家塚650-2</div>
+          </div>
+        </div>
+        <nav class="gf-nav">
+          <a href="news.html">お知らせ</a>
+          <a href="matches.html">試合情報</a>
+          <a href="team.html">選手・スタッフ</a>
+          <a href="club.html">クラブを知る</a>
+          <a href="join.html">入会・体験</a>
+          <a href="documents.html">各種書類</a>
+          <a href="shop/">アイテムショップ</a>
+          <a href="contact.html">お問い合わせ</a>
+        </nav>
+        <div class="gf-sns">
+          <a href="https://www.instagram.com/alaserio_2019/" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 3.3.1 4.8 1.7 4.9 4.9.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.8c-.1 3.2-1.7 4.8-4.9 4.9-1.3.1-1.6.1-4.9.1-3.2 0-3.6 0-4.8-.1-3.3-.1-4.8-1.7-4.9-4.9-.1-1.3-.1-1.6-.1-4.8s0-3.6.1-4.8C2.4 4 4 2.4 7.2 2.3c1.2-.1 1.6-.1 4.8-.1zM12 0C8.7 0 8.3 0 7.1.1 2.7.3.3 2.7.1 7.1 0 8.3 0 8.7 0 12s0 3.7.1 4.9c.2 4.4 2.6 6.8 7 7 1.2.1 1.6.1 4.9.1s3.7 0 4.9-.1c4.4-.2 6.8-2.6 7-7 .1-1.2.1-1.6.1-4.9s0-3.7-.1-4.9c-.2-4.4-2.6-6.8-7-7C15.7 0 15.3 0 12 0zm0 5.8a6.2 6.2 0 1 0 0 12.4 6.2 6.2 0 0 0 0-12.4zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.8a1.4 1.4 0 1 0 0 2.9 1.4 1.4 0 0 0 0-2.9z"/></svg></a>
+        </div>
+      </div>
+    </div>
+    <div class="gf-bottom">
+      <div class="gf-bottom-inner">
+        <div class="gf-legal">
+          <a href="club.html">クラブ概要</a>
+          <a href="contact.html">お問い合わせ</a>
+        </div>
+        <span>© <span id="footer-year"></span> <span id="footer-club-name-copy">FC ALASERIO</span>. ALL RIGHTS RESERVED.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- フローティングCTA -->
+  <div class="float-btns">
+    <a href="join.html#apply" class="fb-trial">体験申込</a>
+  </div>
+
+  <script src="js/config-loader.js?v=20260826"></script>
+  <script src="js/mobile-experience.js?v=20260826"></script>
+  <script>
+    document.getElementById('footer-year').textContent = new Date().getFullYear();
+    var mobileNav = document.getElementById('mobile-nav');
+    document.getElementById('hamburger-btn').addEventListener('click', function(){ mobileNav.classList.add('open'); });
+    document.getElementById('mobile-nav-close').addEventListener('click', function(){ mobileNav.classList.remove('open'); });
+    mobileNav.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', function(){ mobileNav.classList.remove('open'); }); });
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    var posColor = { GK: '#b8870b', DF: '#2a6fd6', MF: '#009a44', FW: '#c0392b' };
+    var allPlayers = [];
+    var currentSort = 'number';
+
+    // 学年表記の正規化: 「中学3年生」→「中3」、「5年生」→「小5」（旧形式「中3」「小5」はそのまま）
+    function normGrade(g){
+      var s = String(g || '').trim();
+      var m = s.match(/^中(?:学)?\s*(\d)/);
+      if(m) return '中' + m[1];
+      m = s.match(/^小?\s*(\d)\s*年生?$/) || s.match(/^小(\d)$/);
+      if(m) return '小' + m[1];
+      return s;
+    }
+
+    // 並び順: 背番号順 or 学年順(中3→中1→小6→小1、未入力は最後)。同順位は背番号で揃える
+    function sortPlayers(arr){
+      var gradeOrder = {'中3':1,'中2':2,'中1':3,'小6':10,'小5':11,'小4':12,'小3':13,'小2':14,'小1':15};
+      return arr.slice().sort(function(a,b){
+        if(currentSort === 'grade'){
+          var ag = gradeOrder[normGrade(a.grade)] || 999;
+          var bg = gradeOrder[normGrade(b.grade)] || 999;
+          if(ag !== bg) return ag - bg;
+        }
+        return (parseInt(a.number)||999) - (parseInt(b.number)||999);
+      });
+    }
+
+    function playerCard(p){
+      var pc = posColor[p.position] || '#6b7078';
+      var photoStyle = p.photo ? ' style="background-image:url(' + esc(p.photo) + ')"' : '';
+      return '<div class="player-card" data-id="' + esc(p.id) + '">' +
+        '<div class="player-photo">' +
+          '<div class="player-photo-img"' + photoStyle + '></div>' +
+          '<span class="player-number">' + esc(p.number || '—') + '</span>' +
+          (p.position ? '<span class="player-pos-badge" style="background:' + pc + ';">' + esc(p.position) + '</span>' : '') +
+        '</div>' +
+        '<div class="player-info">' +
+          '<div class="player-name">' + esc(p.name || '') + '</div>' +
+          '<div class="player-name-en">' + esc(p.nameEn || p.grade || '') + '</div>' +
+        '</div>' +
+        '</div>';
+    }
+
+    // スタッフ登録は除外して選手のみ表示する
+    function isStaff(p){
+      return String(p.category || '').trim().toLowerCase() === 'staff';
+    }
+
+    function render(){
+      var el = document.getElementById('pos-groups');
+      var players = allPlayers.filter(function(p){ return !isStaff(p); });
+      if(players.length === 0){ el.innerHTML = '<p class="no-data">選手情報は準備中です</p>'; return; }
+
+      if(currentSort === 'grade'){
+        // 学年順: 学年ごとの見出しでグループ表示
+        var GRADE_ORDER = ['中3','中2','中1','小6','小5','小4','小3','小2','小1'];
+        var html = GRADE_ORDER.map(function(g){
+          var group = sortPlayers(players.filter(function(p){ return normGrade(p.grade) === g; }));
+          if(group.length === 0) return '';
+          return '<div class="pos-group">' +
+            '<div class="pos-title"><span class="p-en">' + esc(g) + '</span><span class="p-ja">' + esc(g) + 'の選手</span></div>' +
+            '<div class="players-grid">' + group.map(playerCard).join('') + '</div>' +
+            '</div>';
+        }).join('');
+        var noGrade = sortPlayers(players.filter(function(p){ return GRADE_ORDER.indexOf(normGrade(p.grade)) === -1; }));
+        if(noGrade.length > 0){
+          html += '<div class="pos-group">' +
+            '<div class="pos-title"><span class="p-en">MEMBER</span><span class="p-ja">その他の選手</span></div>' +
+            '<div class="players-grid">' + noGrade.map(playerCard).join('') + '</div>' +
+            '</div>';
+        }
+        el.innerHTML = html || '<p class="no-data">選手情報は準備中です</p>';
+      } else {
+        // 背番号順: グループ分けせず1つのグリッドで表示
+        el.innerHTML = '<div class="pos-group">' +
+          '<div class="players-grid">' + sortPlayers(players).map(playerCard).join('') + '</div>' +
+          '</div>';
+      }
+
+      el.querySelectorAll('.player-card').forEach(function(card){
+        card.addEventListener('click', function(){ showDetail(this.dataset.id); });
+      });
+      initCardTilt(el);
+    }
+
+    // カードに追従する3Dチルト演出
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function initCardTilt(container){
+      if(reduceMotion) return;
+      container.querySelectorAll('.player-card').forEach(function(card){
+        card.addEventListener('mousemove', function(e){
+          var r = this.getBoundingClientRect();
+          var px = (e.clientX - r.left) / r.width - 0.5;
+          var py = (e.clientY - r.top) / r.height - 0.5;
+          var rx = (-py * 12).toFixed(2);
+          var ry = (px * 12).toFixed(2);
+          this.style.transform = 'perspective(700px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg) translateY(-6px) scale(1.03)';
+          this.style.setProperty('--glow-x', (px * 100 + 50) + '%');
+          this.style.setProperty('--glow-y', (py * 100 + 50) + '%');
+        });
+        card.addEventListener('mouseleave', function(){
+          this.style.transform = '';
+        });
+      });
+    }
+
+    function showDetail(id){
+      var p = allPlayers.find(function(x){ return String(x.id) === String(id); });
+      if(!p) return;
+      document.getElementById('modal-name').textContent = p.name || '';
+      document.getElementById('modal-nameEn').textContent = p.nameEn || '';
+      document.getElementById('modal-number').textContent = p.number || '—';
+      document.getElementById('modal-position').textContent = p.position || '—';
+      document.getElementById('modal-grade').textContent = p.grade || '—';
+      var ph = document.getElementById('modal-photo');
+      ph.style.backgroundImage = p.photo ? 'url(' + p.photo + ')' : '';
+      document.getElementById('player-modal').classList.add('show');
+    }
+    document.getElementById('modal-close').addEventListener('click', function(){
+      document.getElementById('player-modal').classList.remove('show');
+    });
+    document.getElementById('player-modal').addEventListener('click', function(e){
+      if(e.target === this) this.classList.remove('show');
+    });
+
+    document.querySelectorAll('#sort-filter .filter-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        document.querySelectorAll('#sort-filter .filter-btn').forEach(function(b){ b.classList.remove('on'); });
+        this.classList.add('on');
+        currentSort = this.dataset.sort;
+        render();
+      });
+    });
+
+    ConfigLoader.apply({
+      pageTitle: '選手・スタッフ紹介',
+      onLoaded: function(c){
+        function get(obj,path){ return path.split('.').reduce(function(o,k){ return(o!=null&&o[k]!==undefined)?o[k]:null; },obj); }
+        // Firebase（Match Planner の保存先）から選手データを取得
+        var fbUrl = get(c,'integration.firebaseUrl') || 'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app';
+        var clubId = get(c,'integration.firebaseClubId') || 'alaserio';
+        fetch(fbUrl + '/clubs/' + clubId + '.json')
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            var raw = (data && data.players) || [];
+            // Google Drive共有リンク(file/d/…/view 等)を画像直リンクに自動変換
+            function normalizePhotoUrl(u){
+              var s = String(u || '').trim();
+              if(!s) return '';
+              var m = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]+)/);
+              return m ? 'https://lh3.googleusercontent.com/d/' + m[1] : s;
+            }
+            // 旧形式(position/nameEn)と新プランナー形式(mainGroup/nameRoman)の両対応
+            allPlayers = raw.map(function(p){
+              var q = {}; for(var k in p){ q[k] = p[k]; }
+              q.position = p.position || p.mainGroup || '';
+              q.nameEn = p.nameEn || p.nameRoman || '';
+              q.photo = normalizePhotoUrl(p.photo);
+              return q;
+            });
+            render();
+          })
+          .catch(function(){
+            document.getElementById('pos-groups').innerHTML = '<p class="no-data">選手情報の読み込みに失敗しました</p>';
+          });
+      }
+    });
+  </script>
+</body>
+</html>

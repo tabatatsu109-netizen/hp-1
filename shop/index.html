@@ -1084,9 +1084,45 @@ function compressForUpload(file, cb){
 }
 
 /* ───────── INIT ───────── */
+/* 簡易パスワードゲート（SHOP_CONFIG.gatePassword を設定したクラブのみ・入力は端末に記憶） */
+var GATE_KEY = "shop_gate_" + SHOP_CONFIG.clubId;
+function gateOk(){
+  return !SHOP_CONFIG.gatePassword || localStorage.getItem(GATE_KEY) === "ok";
+}
+function renderGate(){
+  document.getElementById("app").innerHTML =
+    '<div style="background:'+G.g3+';min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">'+
+      '<div style="background:rgba(255,255,255,.07);border-radius:16px;padding:34px 28px;width:100%;max-width:360px;text-align:center;border:1px solid rgba(255,255,255,.15)">'+
+        '<div style="font-size:34px;margin-bottom:10px">🔑</div>'+
+        '<div style="color:#fff;font-weight:900;font-size:19px;letter-spacing:2px;margin-bottom:6px">'+esc(SHOP_CONFIG.clubNameFull)+'</div>'+
+        '<div style="color:rgba(255,255,255,.65);font-size:12px;line-height:1.9;margin-bottom:16px">クラブ関係者専用ショップです。<br>クラブから案内されたパスワードを入力してください。</div>'+
+        '<input type="password" id="gatePw" onkeydown="if(event.key===\'Enter\')window.__gateTry()" style="width:100%;padding:12px 14px;border:1.5px solid rgba(255,255,255,.2);border-radius:8px;font-size:15px;background:rgba(255,255,255,.1);color:#fff;outline:none;text-align:center;letter-spacing:3px" placeholder="パスワード">'+
+        '<div id="gateErr" style="color:#f88;font-size:12px;margin-top:8px;min-height:16px"></div>'+
+        '<button onclick="window.__gateTry()" style="width:100%;padding:13px;background:'+G.g1+';color:#fff;border-radius:8px;font-weight:900;font-size:15px;margin-top:4px;border:none;cursor:pointer">ショップへ入る</button>'+
+      '</div>'+
+    '</div>';
+  var inp = document.getElementById("gatePw");
+  if(inp) inp.focus();
+}
+window.__gateTry = function(){
+  var v = (document.getElementById("gatePw").value || "").trim();
+  if(v && v.toUpperCase() === String(SHOP_CONFIG.gatePassword).toUpperCase()){
+    localStorage.setItem(GATE_KEY, "ok");
+    render();
+    loadProductImages();
+  } else {
+    var er = document.getElementById("gateErr");
+    if(er) er.textContent = "パスワードが違います";
+  }
+};
+
 // 注文データは管理者ログイン後にのみ取得する（保護者側は読み取り不可）
-render();
-loadProductImages();
+if(gateOk()){
+  render();
+  loadProductImages();
+} else {
+  renderGate();
+}
 
 })();
 </script>

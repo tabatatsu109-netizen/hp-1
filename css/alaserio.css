@@ -1031,6 +1031,12 @@ body.has-bnav { padding-bottom: 62px; }
 .sp2-recruit a:hover { background: var(--orange); color: #fff; }
 @media (min-width: 768px) { .sp2-recruit { flex-direction: row; justify-content: space-between; text-align: left; padding: 24px 34px; } }
 
+/* WINGナビリンク（姉妹施設・緑アクセント） */
+.gh-nav .nav-wing .n-en { color: #8dc63f; }
+.gh-nav .nav-wing:hover { border-left-color: #8dc63f; }
+.m-nav .nav-wing .n-en { color: #8dc63f; }
+.gf-nav .nav-wing { color: #8dc63f; }
+
 /* トップのスポンサー帯: ロゴカード対応 */
 .sp-items--logos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
 .sp-items--logos .sp-item { padding: 16px 14px; display: flex; align-items: center; justify-content: center; min-height: 84px; }

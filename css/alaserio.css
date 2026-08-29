@@ -828,6 +828,139 @@ body.has-bnav { padding-bottom: 62px; }
 /* スコア演出(mobile-experience.js) 対象の互換クラス */
 .result-score.counting .score-num { color: var(--orange); }
 
+/* ============================================================
+   入会・体験ページ v2（丸角カード・センター見出し・アイコン）
+   ============================================================ */
+.jn-body { background: var(--bg-soft); }
+.jn-sec { margin-bottom: 64px; }
+.jn-head { text-align: center; margin-bottom: 36px; }
+.jn-head .en {
+  display: block; font-size: 13px; font-weight: 700; letter-spacing: 5px;
+  color: var(--orange); text-transform: uppercase;
+}
+.jn-head .ja {
+  display: block; margin-top: 8px;
+  font-family: var(--font-jp); font-weight: 900;
+  font-size: clamp(25px, 4.4vw, 38px); letter-spacing: 3px; color: var(--navy); line-height: 1.3;
+}
+.jn-head .ja::after {
+  content: ''; display: block; width: 46px; height: 4px; border-radius: 2px;
+  background: var(--orange); margin: 16px auto 0;
+}
+
+/* ── ステップ(番号バッジ + 矢印) ── */
+.jn-steps { display: flex; flex-direction: column; gap: 26px; padding-top: 18px; }
+.jn-step {
+  position: relative; flex: 1; background: #fff; border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(16,19,28,0.07);
+  padding: 42px 20px 26px; text-align: center;
+}
+.jn-step-no {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--orange); color: #fff;
+  font-family: var(--font-en); font-size: 18px; letter-spacing: 1px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(247,127,0,0.4);
+}
+.jn-step-icon { width: 56px; height: 56px; margin: 4px auto 14px; display: block; }
+.jn-step-icon svg { width: 100%; height: 100%; stroke: var(--navy); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.jn-step-title { font-weight: 900; color: var(--navy); font-size: 17px; letter-spacing: 1px; }
+.jn-step-desc { margin-top: 10px; font-size: 12.5px; line-height: 1.95; color: var(--ink-sub); }
+.jn-arrow { display: none; }
+@media (min-width: 900px) {
+  .jn-steps { flex-direction: row; align-items: stretch; gap: 0; }
+  .jn-step { min-width: 0; }
+  .jn-arrow { display: flex; align-items: flex-start; flex: none; padding: 6px 6px 0; }
+  .jn-arrow svg { width: 38px; height: 14px; }
+  .jn-arrow line { stroke: var(--orange); stroke-width: 2; }
+  .jn-arrow path { fill: var(--orange); }
+}
+
+/* ── カテゴリーカード(写真 × 情報) ── */
+.jn-cat {
+  background: #fff; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 10px 28px rgba(16,19,28,0.09); display: grid;
+}
+.jn-cat-photo {
+  position: relative; min-height: 250px;
+  background-size: cover; background-position: center;
+  display: flex; align-items: flex-end;
+}
+.jn-cat-photo::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to top right, rgba(11,18,48,0.85) 16%, rgba(11,18,48,0.3) 58%, rgba(11,18,48,0.05));
+}
+.jn-cat-photo-body { position: relative; padding: 24px; }
+.jn-cat-en { font-size: 13px; font-weight: 700; letter-spacing: 4px; color: var(--orange-b); text-transform: uppercase; }
+.jn-cat-name { color: #fff; font-size: clamp(24px, 3.4vw, 32px); font-weight: 900; letter-spacing: 3px; margin-top: 6px; }
+.jn-cat-chip {
+  display: inline-block; margin-top: 12px;
+  background: rgba(255,255,255,0.94); color: var(--navy);
+  font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 6px;
+}
+.jn-cat-info { padding: 8px 24px 24px; display: flex; flex-direction: column; }
+.jn-row {
+  display: grid; grid-template-columns: 128px 1fr; gap: 16px;
+  padding: 18px 0; border-bottom: 1px solid var(--line); align-items: start;
+}
+.jn-row:last-of-type { border-bottom: none; }
+.jn-row-l { display: flex; align-items: center; gap: 10px; font-weight: 900; color: var(--navy); font-size: 14.5px; }
+.jn-row-l svg { width: 27px; height: 27px; stroke: var(--orange); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.jn-row-c { font-size: 13.5px; line-height: 2.05; font-weight: 500; padding-top: 3px; border-left: 1px solid var(--line); padding-left: 16px; }
+.jn-cat-cta { margin-top: auto; padding-top: 18px; text-align: right; }
+@media (min-width: 900px) {
+  .jn-cat { grid-template-columns: 42% 1fr; }
+  .jn-cat-photo { min-height: 360px; }
+  .jn-cat-photo-body { padding: 30px; }
+  .jn-cat-info { padding: 14px 32px 28px; }
+}
+
+/* ── 丸角ボタン ── */
+.jn-btn {
+  display: inline-flex; align-items: center; gap: 12px;
+  background: var(--orange); color: #fff;
+  font-weight: 900; letter-spacing: 3px; font-size: 14.5px;
+  padding: 15px 40px; border-radius: 10px;
+  box-shadow: 0 6px 16px rgba(247,127,0,0.35);
+  transition: background .2s, transform .2s;
+}
+.jn-btn::after { content: '›'; font-size: 19px; font-weight: 700; }
+.jn-btn:hover { background: var(--orange-b); transform: translateY(-2px); }
+.jn-btn-o {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 2px solid var(--navy); color: var(--navy); background: #fff;
+  font-weight: 700; font-size: 13.5px; letter-spacing: 1px;
+  padding: 13px 26px; border-radius: 10px; transition: all .2s;
+}
+.jn-btn-o:hover { background: var(--navy); color: #fff; }
+.jn-btn-w {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #fff; color: #a35300;
+  font-weight: 900; font-size: 14.5px; letter-spacing: 1px;
+  padding: 15px 30px; border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15); transition: transform .2s;
+}
+.jn-btn-w:hover { transform: translateY(-2px); }
+
+/* ── 白カード / 申込パネル ── */
+.jn-card {
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(16,19,28,0.07);
+  padding: 28px 22px;
+}
+@media (min-width: 768px) { .jn-card { padding: 36px 40px; } }
+.jn-notes { color: var(--ink-sub); font-size: 12.5px; line-height: 2.2; margin-top: 16px; padding-left: 1.4em; }
+.jn-apply {
+  background: linear-gradient(120deg, var(--orange) 0%, #d96e00 100%);
+  border-radius: 16px; padding: 36px 24px; color: #fff; text-align: center;
+  box-shadow: 0 12px 30px rgba(247,127,0,0.3);
+}
+.jn-apply-title { font-size: clamp(19px, 3vw, 25px); font-weight: 900; letter-spacing: 3px; }
+.jn-apply-desc { margin-top: 12px; font-size: 13px; line-height: 2.1; color: rgba(255,255,255,0.94); }
+.jn-apply-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 22px; }
+@media (min-width: 768px) { .jn-apply { padding: 44px 40px; } }
+
 /* ── 動きを減らす設定への配慮 ── */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

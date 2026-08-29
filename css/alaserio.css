@@ -961,6 +961,82 @@ body.has-bnav { padding-bottom: 62px; }
 .jn-apply-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 22px; }
 @media (min-width: 768px) { .jn-apply { padding: 44px 40px; } }
 
+/* ============================================================
+   スポンサーページ
+   ============================================================ */
+.sp2-body { background: var(--bg-soft); }
+.sp2-hero {
+  position: relative; overflow: hidden; color: #fff;
+  background:
+    linear-gradient(92deg, #0b1230 0%, rgba(11,18,48,0.92) 40%, rgba(11,18,48,0.62) 100%),
+    var(--navy-deep);
+}
+.sp2-hero-photo {
+  position: absolute; inset: 0 0 0 30%;
+  background-size: cover; background-position: center;
+  filter: grayscale(35%) brightness(0.5);
+}
+.sp2-hero-photo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #0b1230 0%, rgba(11,18,48,0.4) 55%, rgba(11,18,48,0.35)); }
+.sp2-hero::before {
+  content: ''; position: absolute; left: -12%; top: 46%; width: 130%; height: 2px;
+  background: var(--orange); transform: rotate(-16deg); opacity: 0.85; z-index: 2;
+}
+.sp2-hero::after {
+  content: ''; position: absolute; right: 6%; bottom: 12%; width: 120px; height: 18px;
+  background: var(--orange); transform: skewX(-30deg); opacity: 0.9; z-index: 2;
+}
+.sp2-hero-inner { position: relative; z-index: 3; max-width: 1160px; margin: 0 auto; padding: 58px 20px 54px; }
+.sp2-title {
+  font-family: var(--font-en); font-weight: 400; font-style: italic; text-transform: uppercase;
+  font-size: clamp(58px, 11vw, 120px); line-height: 0.95; letter-spacing: 2px;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+.sp2-sub { margin-top: 14px; font-size: clamp(15px, 2.4vw, 20px); font-weight: 900; letter-spacing: 3px; }
+.sp2-sub2 { margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: 4px; color: rgba(255,255,255,0.75); }
+@media (min-width: 768px) { .sp2-hero-inner { padding: 80px 28px 74px; } }
+
+.sp2-label {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  margin-bottom: 8px;
+}
+.sp2-label::before, .sp2-label::after { content: ''; width: 44px; height: 2px; background: var(--orange); }
+.sp2-label span { font-family: var(--font-en); font-size: 15px; letter-spacing: 4px; color: var(--orange); text-transform: uppercase; }
+.sp2-label-ja { text-align: center; font-size: clamp(19px, 3vw, 26px); font-weight: 900; letter-spacing: 4px; color: var(--navy); margin-bottom: 34px; }
+
+.sp2-grid { display: grid; gap: 14px; }
+.sp2-card {
+  background: #fff; border-radius: 10px; padding: 22px 18px 24px; text-align: center;
+  box-shadow: 0 4px 16px rgba(16,19,28,0.06);
+  transition: transform .25s, box-shadow .25s;
+}
+.sp2-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(16,19,28,0.12); }
+.sp2-tier { font-family: var(--font-jp); font-size: 10.5px; font-weight: 700; letter-spacing: 3px; color: var(--orange); text-transform: uppercase; }
+.sp2-card img { max-height: 62px; max-width: 82%; width: auto; margin: 14px auto 0; object-fit: contain; }
+.sp2-card-name { margin-top: 16px; font-size: 17px; font-weight: 900; letter-spacing: 1px; color: var(--navy); }
+.sp2-card-desc { margin-top: 8px; font-size: 11.5px; color: var(--ink-sub); line-height: 1.9; }
+@media (min-width: 640px) { .sp2-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .sp2-grid { grid-template-columns: repeat(4, 1fr); } .sp2-card img { max-height: 70px; } }
+
+.sp2-recruit {
+  margin-top: 34px; background: var(--navy); color: #fff; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 26px 24px; text-align: center;
+}
+.sp2-recruit p { font-size: 14.5px; font-weight: 900; letter-spacing: 2px; }
+.sp2-recruit a {
+  display: inline-block; border: 1.5px solid var(--orange); color: var(--orange);
+  font-size: 13px; font-weight: 700; letter-spacing: 2px; padding: 12px 30px; border-radius: 6px;
+  transition: all .2s;
+}
+.sp2-recruit a:hover { background: var(--orange); color: #fff; }
+@media (min-width: 768px) { .sp2-recruit { flex-direction: row; justify-content: space-between; text-align: left; padding: 24px 34px; } }
+
+/* トップのスポンサー帯: ロゴカード対応 */
+.sp-items--logos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
+.sp-items--logos .sp-item { padding: 16px 14px; display: flex; align-items: center; justify-content: center; min-height: 84px; }
+.sp-items--logos .sp-item img { max-height: 48px; max-width: 100%; width: auto; object-fit: contain; }
+@media (min-width: 768px) { .sp-items--logos { grid-template-columns: repeat(4, 1fr); } }
+
 /* ── 動きを減らす設定への配慮 ── */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>お問い合わせ受信箱 | FC ALASERIO</title>
+  <link rel="icon" href="assets/logo.png">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/alaserio.css?v=20260829c">
+</head>
+<body style="background:var(--bg-soft);">
+
+  <main class="page-body" style="padding-top:40px;">
+    <div class="container" style="max-width:760px;">
+
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;">
+        <img src="assets/logo.png" alt="FC ALASERIO" style="height:52px;">
+        <div>
+          <div style="font-family:var(--font-en);font-size:24px;color:var(--navy);text-transform:uppercase;">Inquiries</div>
+          <div style="font-size:12px;font-weight:700;color:var(--ink-sub);letter-spacing:2px;">お問い合わせ受信箱（スタッフ専用）</div>
+        </div>
+      </div>
+
+      <!-- ログイン -->
+      <div id="login-box" style="background:#fff;border:1px solid var(--line);padding:26px 22px;">
+        <p style="font-size:13px;color:var(--ink-sub);line-height:2;margin-bottom:16px;">
+          クラブアカウント（Planner・ショップ管理と同じ）でログインしてください。
+        </p>
+        <div class="cf-form">
+          <input class="cf-input" type="email" id="lg-email" placeholder="メールアドレス" autocomplete="username">
+          <input class="cf-input" type="password" id="lg-pw" placeholder="パスワード" autocomplete="current-password">
+          <button class="cf-submit" id="lg-btn">ログイン</button>
+          <p id="lg-err" style="color:var(--red);font-size:12.5px;font-weight:700;min-height:18px;"></p>
+        </div>
+      </div>
+
+      <!-- 一覧 -->
+      <div id="list-box" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <span id="inq-count" style="font-size:13px;font-weight:700;color:var(--ink-sub);"></span>
+          <button class="inq-btn" id="reload-btn">🔄 更新</button>
+        </div>
+        <div id="inq-list"></div>
+      </div>
+
+      <p style="margin-top:30px;"><a href="index.html" style="font-size:12.5px;font-weight:700;color:var(--ink-sub);">← ホームページへ戻る</a></p>
+    </div>
+  </main>
+
+  <script>
+    var API_KEY = 'AIzaSyAZgkCjpPQpjrc25Q-xxXhLRxXpummUKmM';
+    var DB = 'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app';
+    var CLUB = 'alaserio';
+    var AUTH_KEY = 'inq_auth_' + CLUB;
+    var idToken = '', tokenExp = 0;
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function authState(){ try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch(e){ return null; } }
+
+    function login(email, pw){
+      return fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + API_KEY, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email: email, password: pw, returnSecureToken: true })
+      }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(r){
+        if(!r.ok) throw new Error('メールアドレスまたはパスワードが違います');
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ email: email, refreshToken: r.d.refreshToken }));
+        idToken = r.d.idToken; tokenExp = Date.now() + (parseInt(r.d.expiresIn,10)-300)*1000;
+      });
+    }
+    function refresh(){
+      var st = authState();
+      if(!st || !st.refreshToken) return Promise.resolve('');
+      return fetch('https://securetoken.googleapis.com/v1/token?key=' + API_KEY, {
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(st.refreshToken)
+      }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(r){
+        if(!r.ok){ localStorage.removeItem(AUTH_KEY); return ''; }
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ email: st.email, refreshToken: r.d.refresh_token || st.refreshToken }));
+        idToken = r.d.id_token; tokenExp = Date.now() + (parseInt(r.d.expires_in,10)-300)*1000;
+        return idToken;
+      }).catch(function(){ return ''; });
+    }
+    function token(){
+      if(idToken && Date.now() < tokenExp) return Promise.resolve(idToken);
+      return refresh();
+    }
+
+    function load(){
+      return token().then(function(t){
+        if(!t) throw new Error('ログインしてください');
+        return fetch(DB + '/contact/' + CLUB + '.json?auth=' + t);
+      }).then(function(r){
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function(data){
+        var list = data ? Object.keys(data).map(function(k){ return Object.assign({ key: k }, data[k]); }) : [];
+        list.sort(function(a,b){ return String(b.date||'') < String(a.date||'') ? -1 : 1; }).reverse();
+        var pending = list.filter(function(x){ return x.status !== '対応済み'; }).length;
+        document.getElementById('inq-count').textContent = '全' + list.length + '件（未対応 ' + pending + '件）';
+        document.getElementById('inq-list').innerHTML = list.length === 0
+          ? '<p style="color:var(--ink-sub);font-size:13px;">お問い合わせはまだありません</p>'
+          : list.map(function(x){
+              var done = x.status === '対応済み';
+              return '<div class="inq-row' + (done ? ' inq-row--done' : '') + '">' +
+                '<div class="inq-meta"><span class="inq-type">' + esc(x.type || 'お問い合わせ') + '</span><span>' + esc(x.date || '') + '</span><span>' + (done ? '✅ 対応済み' : '🔶 未対応') + '</span></div>' +
+                '<div class="inq-name" style="margin-top:8px;">' + esc(x.name || '') + '<span style="font-size:12px;font-weight:500;color:var(--ink-sub);margin-left:12px;">' + esc(x.contact || '') + '</span></div>' +
+                '<div class="inq-body">' + esc(x.message || '') + '</div>' +
+                '<div class="inq-actions"><button class="inq-btn" onclick="toggleStatus(\'' + esc(x.key) + '\', ' + (done ? 'false' : 'true') + ')">' + (done ? '未対応に戻す' : '対応済みにする') + '</button></div>' +
+                '</div>';
+            }).join('');
+        document.getElementById('login-box').style.display = 'none';
+        document.getElementById('list-box').style.display = 'block';
+      });
+    }
+
+    window.toggleStatus = function(key, toDone){
+      token().then(function(t){
+        return fetch(DB + '/contact/' + CLUB + '/' + key + '/status.json?auth=' + t, {
+          method: 'PUT', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(toDone ? '対応済み' : '未対応')
+        });
+      }).then(function(r){ if(r.ok) load(); });
+    };
+
+    document.getElementById('lg-btn').addEventListener('click', function(){
+      var email = document.getElementById('lg-email').value.trim();
+      var pw = document.getElementById('lg-pw').value;
+      var err = document.getElementById('lg-err');
+      err.textContent = '';
+      if(!email || !pw){ err.textContent = 'メールアドレスとパスワードを入力してください'; return; }
+      login(email, pw).then(load).catch(function(e){ err.textContent = e.message; });
+    });
+    document.getElementById('lg-pw').addEventListener('keydown', function(e){ if(e.key === 'Enter') document.getElementById('lg-btn').click(); });
+    document.getElementById('reload-btn').addEventListener('click', load);
+
+    // ログイン済みなら自動表示
+    if(authState()){
+      var st = authState();
+      document.getElementById('lg-email').value = st.email || '';
+      load().catch(function(){ /* 再ログイン待ち */ });
+    }
+  </script>
+</body>
+</html>

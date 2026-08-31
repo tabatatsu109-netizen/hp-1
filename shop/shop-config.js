@@ -9,12 +9,14 @@ var SHOP_CONFIG = {
   firebaseUrl:  'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app',
   firebaseApiKey: 'AIzaSyAZgkCjpPQpjrc25Q-xxXhLRxXpummUKmM',  // Firebase の Web APIキー（クラブ別ログイン用・公開可）
 
-  // カラー（HPのカラー: オレンジ #f77f00 × ネイビー #141f47 × グリーン #009a44）
+  // カラー（HPのカラー: オレンジ #f77f00 × ネイビー #141f47）
+  // accent はヒーロー見出し・ヘッダー下線・主要ボタンに使われる差し色。
+  // クラブカラーに合わせて明るいオレンジにする（緑は使わない）
   colors: {
     primary:     '#f77f00',  // メイン（ボタン・価格）
     primaryDark: '#c96700',  // メイン濃いめ（サブボタン）
     deep:        '#141f47',  // 最も濃い（ヘッダー・フッター背景 = クラブネイビー）
-    accent:      '#009a44',  // アクセント（縁取り・強調 = クラブグリーン）
+    accent:      '#ff9d33',  // アクセント（ITEM SHOP見出し・カートボタン等）
     bg:          '#f7f4ef'   // 薄い背景
   },
 

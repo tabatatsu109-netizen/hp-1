@@ -96,13 +96,6 @@
       </div>
       <div class="upcoming-grid" id="upcoming-grid"><p class="no-data">読み込み中...</p></div>
 
-      <!-- 得点ランキング -->
-      <div class="sec-head">
-        <span class="sec-en" style="font-size:26px;">TOP SCORER</span>
-        <span class="sec-ja">得点ランキング</span>
-      </div>
-      <div class="scorer-grid" id="scorer-grid"><p class="no-data">読み込み中...</p></div>
-
       <!-- 日程・結果一覧 -->
       <div class="sec-head">
         <span class="sec-en" style="font-size:26px;">RESULTS</span>
@@ -223,20 +216,10 @@
       return top ? { name: top, goals: counts[top] } : null;
     }
 
+    // 得点ランキングのセクションは非掲載（要素が無ければ何もしない）
     function renderScorers(){
       var el = document.getElementById('scorer-grid');
-      var cats = state.categories.length ? state.categories : ['U-15', 'U-12'];
-      var cards = cats.map(function(cat){
-        var top = computeTopScorer(cat);
-        return '<div class="scorer-card">' +
-          '<div class="scorer-cat">' + esc(cat) + '</div>' +
-          (top
-            ? '<div class="scorer-name">' + esc(top.name) + '</div>' +
-              '<div class="scorer-goals"><span class="scorer-num">' + top.goals + '</span><span class="scorer-unit">得点</span></div>'
-            : '<div class="scorer-empty">まだ得点記録がありません</div>') +
-          '</div>';
-      }).join('');
-      el.innerHTML = cards || '<p class="no-data">表示できるカテゴリーがありません</p>';
+      if(!el) return;
     }
 
     function catMatches(){

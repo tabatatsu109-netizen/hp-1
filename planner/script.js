@@ -977,6 +977,7 @@ function renderBoard() {
   document.getElementById('formation-label').textContent = f;
 
   const posEl = document.getElementById('pitch-positions');
+  if (!currentMatch.lineup) currentMatch.lineup = {};
   posEl.innerHTML = positions.map(pos => {
     const player = currentMatch.lineup[pos.id];
     const isFilled = !!player;
@@ -1302,16 +1303,7 @@ function renderResult() {
   document.getElementById('result-opp-score').value = r?.oppScore ?? 0;
   document.getElementById('result-format').value = r?.format || '40分×2';
   document.getElementById('result-image').value = r?.imageUrl || '';
-  // 保存済み写真があればプレビュー表示
-  {
-    const pv = document.getElementById('result-image-preview');
-    const st = document.getElementById('result-image-status');
-    if (pv) {
-      if (r?.imageUrl) { pv.src = r.imageUrl; pv.style.display = 'block'; }
-      else { pv.removeAttribute('src'); pv.style.display = 'none'; }
-    }
-    if (st) st.textContent = '';
-  }
+  updatePhotoPreview('result');
 
   goalRows = r?.goals ? [...r.goals] : [];
   concedeRows = r?.concedes ? [...r.concedes] : [];
@@ -2311,6 +2303,8 @@ async function sendPost() {
     showToast('投稿しました！', 'success');
     document.getElementById('post-title').value = '';
     document.getElementById('post-body').value = '';
+    document.getElementById('post-image').value = '';
+    updatePhotoPreview('post');
     renderPostHistory();
   } catch(e) {
     setSyncIcon('⚠️');
@@ -3197,68 +3191,74 @@ function getImgbbStoreKey() {
 function getImgbbKey() {
   return localStorage.getItem(getImgbbStoreKey()) || '';
 }
-// 画像を長辺1200pxまで縮小してbase64にする（アップロードを軽く・速く）
-function compressImageForUpload(file, cb) {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    URL.revokeObjectURL(url);
-    const max = 1200;
-    const scale = Math.min(1, max / Math.max(img.width, img.height));
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const cv = document.createElement('canvas');
-    cv.width = w; cv.height = h;
-    cv.getContext('2d').drawImage(img, 0, 0, w, h);
-    cb(cv.toDataURL('image/jpeg', 0.82).split(',')[1]);
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); cb(null); };
-  img.src = url;
+// プレビュー・解除ボタンの表示を更新する（target: 'result' | 'post'）
+function updatePhotoPreview(target) {
+  const url = (document.getElementById(`${target}-image`)?.value || '').trim();
+  const img = document.getElementById(`${target}-image-preview`);
+  const clr = document.getElementById(`${target}-image-clear`);
+  if (!img) return;
+  if (url) { img.src = url; img.style.display = 'block'; if (clr) clr.style.display = ''; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; if (clr) clr.style.display = 'none'; }
 }
-// 写真選択 → アップロード → URLを input に反映（プレビュー付き）
-function setupImageUpload(pickBtnId, fileInputId, urlInputId, statusId, previewId) {
-  const btn = document.getElementById(pickBtnId);
-  const fileInput = document.getElementById(fileInputId);
-  const urlInput = document.getElementById(urlInputId);
-  const statusEl = document.getElementById(statusId);
-  const previewEl = document.getElementById(previewId);
-  if (!btn || !fileInput || !urlInput) return;
+function clearPickedPhoto(target) {
+  const input = document.getElementById(`${target}-image`);
+  if (input) input.value = '';
+  updatePhotoPreview(target);
+}
 
-  btn.addEventListener('click', () => {
-    if (!getImgbbKey()) {
-      showToast('設定画面で「写真アップロード用キー（imgbb）」を登録してください', 'error');
-      return;
-    }
-    fileInput.click();
-  });
+// スマホの写真をImgBBへアップロードして使う（自動で縮小してから送る）
+function uploadPhoto(input, target) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const key = getImgbbKey();
+  const nokey = document.getElementById(`${target}-image-nokey`);
+  if (!key) { if (nokey) nokey.style.display = 'block'; return; }
+  if (nokey) nokey.style.display = 'none';
 
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    if (statusEl) statusEl.textContent = '写真を準備中…';
-    btn.disabled = true;
-    compressImageForUpload(file, (b64) => {
-      if (!b64) { if (statusEl) statusEl.textContent = '写真を読み込めませんでした'; btn.disabled = false; return; }
-      if (statusEl) statusEl.textContent = 'アップロード中…';
+  const btn = document.getElementById(`${target}-image-btn`);
+  const status = document.getElementById(`${target}-image-status`);
+  if (btn) btn.style.display = 'none';
+  if (status) status.style.display = 'block';
+
+  // 画像を最大1600pxに縮小・JPEG圧縮（通信量と表示速度のため）
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1600;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > MAX) {
+        const ratio = MAX / Math.max(w, h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+
       const fd = new FormData();
-      fd.append('image', b64);
-      fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(getImgbbKey()), { method: 'POST', body: fd })
+      fd.append('image', base64);
+      fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(key), { method: 'POST', body: fd })
         .then(r => r.json())
-        .then(j => {
-          const link = j && j.data && (j.data.display_url || j.data.url);
-          if (!link) throw new Error('upload failed');
-          urlInput.value = link;
-          if (previewEl) { previewEl.src = link; previewEl.style.display = 'block'; }
-          if (statusEl) statusEl.textContent = '✅ アップロード完了';
-          showToast('写真をアップロードしました', 'success');
+        .then(data => {
+          const url = data && data.data && (data.data.display_url || data.data.url);
+          if (!url) throw new Error('ImgBB error');
+          const urlInput = document.getElementById(`${target}-image`);
+          if (urlInput) urlInput.value = url;
+          updatePhotoPreview(target);
+          showToast('写真をアップロードしました ✓', 'success');
         })
-        .catch(() => {
-          if (statusEl) statusEl.textContent = '';
-          showToast('アップロードに失敗しました。キーと通信環境をご確認ください', 'error');
-        })
-        .finally(() => { btn.disabled = false; fileInput.value = ''; });
-    });
-  });
+        .catch(err => { console.error(err); showToast('アップロードに失敗しました。電波とAPIキーを確認してください', 'error'); })
+        .finally(() => { if (btn) btn.style.display = ''; if (status) status.style.display = 'none'; });
+    };
+    img.onerror = () => {
+      showToast('画像を読み込めませんでした', 'error');
+      if (btn) btn.style.display = ''; if (status) status.style.display = 'none';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 // ===== SETTINGS =====
@@ -3554,10 +3554,6 @@ function bindEvents() {
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettingsForm);
   document.getElementById('btn-auth-login')?.addEventListener('click', loginSettingsForm);
   document.getElementById('btn-auth-logout')?.addEventListener('click', logoutSettingsForm);
-
-  // 写真アップロード（試合結果・ニュース投稿）
-  setupImageUpload('btn-result-image-pick', 'result-image-file', 'result-image', 'result-image-status', 'result-image-preview');
-  setupImageUpload('btn-post-image-pick', 'post-image-file', 'post-image', 'post-image-status', 'post-image-preview');
   document.getElementById('btn-load-cloud')?.addEventListener('click', loadFromCloud);
   document.getElementById('btn-save-cloud')?.addEventListener('click', saveToCloud);
   document.getElementById('btn-reset-operational')?.addEventListener('click', resetOperationalData);
@@ -4059,8 +4055,7 @@ function snsSetThumb() {
   if (snsOrigin === 'match') {
     const imgInput = document.getElementById('result-image');
     if (imgInput) imgInput.value = lastSnsThumb;
-    const pv = document.getElementById('result-image-preview');
-    if (pv) { pv.src = lastSnsThumb; pv.style.display = 'block'; }
+    updatePhotoPreview('result');
     showToast('結果フォームの画像欄に設定しました。「結果を保存」を押すと記事に反映されます', 'success');
   } else if (snsOrigin === 'schedule') {
     announcementSnsImage = lastSnsThumb;

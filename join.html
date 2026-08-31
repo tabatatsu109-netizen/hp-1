@@ -203,12 +203,50 @@
         <div class="jn-apply">
           <div class="jn-apply-title">体験練習 随時受付中！</div>
           <p class="jn-apply-desc">
-            お電話または Instagram のDMにて「お名前・学年・体験希望」の旨をお知らせください。<br>
-            練習中などで出られない場合は、折り返しご連絡いたします。
+            下のフォームからお申し込みいただけます。<br>
+            お急ぎの場合はお電話・InstagramのDMでもOKです。
           </p>
           <div class="jn-apply-btns">
             <a href="tel:0552847717" class="jn-btn-w">📞 055-284-7717 に電話する</a>
             <a href="https://www.instagram.com/alaserio_2019/" target="_blank" rel="noopener" class="jn-btn-w">📩 InstagramのDMで申し込む</a>
+          </div>
+        </div>
+
+        <!-- 体験申込フォーム -->
+        <div class="jn-card" style="margin-top:18px;">
+          <form class="cf-form" id="trial-form">
+            <div class="cf-group">
+              <label class="cf-label">お名前（選手）<span class="req">必須</span></label>
+              <input class="cf-input" type="text" id="tf-name" required>
+            </div>
+            <div class="cf-group">
+              <label class="cf-label">学年<span class="req">必須</span></label>
+              <select class="cf-select" id="tf-grade" required>
+                <option value="" disabled selected>選択してください</option>
+                <option>小学6年生</option>
+                <option>中学1年生</option>
+                <option>中学2年生</option>
+                <option>中学3年生</option>
+                <option>その他</option>
+              </select>
+            </div>
+            <div class="cf-group">
+              <label class="cf-label">保護者のお名前<span class="req">必須</span></label>
+              <input class="cf-input" type="text" id="tf-parent" required>
+            </div>
+            <div class="cf-group">
+              <label class="cf-label">ご連絡先（電話番号またはメールアドレス）<span class="req">必須</span></label>
+              <input class="cf-input" type="text" id="tf-contact" required placeholder="例) 090-1234-5678 / example@mail.com">
+            </div>
+            <div class="cf-group">
+              <label class="cf-label">ご希望・ご質問など</label>
+              <textarea class="cf-textarea" id="tf-message" placeholder="例) 平日の練習に参加希望です。サッカー経験は3年です。"></textarea>
+            </div>
+            <button type="submit" class="cf-submit" id="tf-submit">体験を申し込む →</button>
+            <p class="cf-note">※ 体験は無料です。内容を確認のうえ、ご連絡先へ折り返しご案内いたします。</p>
+          </form>
+          <div class="cf-done" id="tf-done" style="display:none;">
+            ✅ 体験のお申し込みを受け付けました！<br>クラブより折り返しご連絡いたします。
           </div>
         </div>
       </section>
@@ -269,6 +307,52 @@
     document.getElementById('mobile-nav-close').addEventListener('click', function(){ mobileNav.classList.remove('open'); });
     mobileNav.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', function(){ mobileNav.classList.remove('open'); }); });
     ConfigLoader.apply({ pageTitle: '入会・体験' });
+
+    // 体験申込フォーム送信
+    //  ① Formspree → クラブのメールに通知
+    //  ② Firebase /contact/alaserio → 受信箱(inquiries.html)にも記録
+    document.getElementById('trial-form').addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = document.getElementById('tf-submit');
+      btn.disabled = true; btn.textContent = '送信中...';
+      var pad = function(n){ return n < 10 ? '0' + n : '' + n; };
+      var d = new Date();
+      var name = document.getElementById('tf-name').value.trim();
+      var grade = document.getElementById('tf-grade').value;
+      var parent = document.getElementById('tf-parent').value.trim();
+      var contact = document.getElementById('tf-contact').value.trim();
+      var message = document.getElementById('tf-message').value.trim();
+      var dateStr = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+
+      var mailBody = {
+        '_subject': '【FCアラセリオHP】体験申込：' + name + 'さん（' + grade + '）',
+        'お名前（選手）': name, '学年': grade, '保護者のお名前': parent,
+        'ご連絡先': contact, 'ご希望・ご質問': message || '（なし）'
+      };
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) mailBody['_replyto'] = contact;
+
+      fetch('https://formspree.io/f/mvkozzvw', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(mailBody)
+      }).then(function(res){
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        fetch('https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app/contact/alaserio.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name + '（' + grade + '） / 保護者: ' + parent,
+            contact: contact, type: '体験申込',
+            message: message || '（記入なし）', date: dateStr, status: '未対応'
+          })
+        }).catch(function(){});
+        document.getElementById('trial-form').style.display = 'none';
+        document.getElementById('tf-done').style.display = 'block';
+      }).catch(function(){
+        btn.disabled = false; btn.textContent = '体験を申し込む →';
+        alert('送信に失敗しました。お手数ですがお電話（055-284-7717）にてご連絡ください。');
+      });
+    });
   </script>
 </body>
 </html>

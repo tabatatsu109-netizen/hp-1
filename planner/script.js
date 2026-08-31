@@ -4724,6 +4724,16 @@ function exportStatsCsv() {
 }
 
 function initApp() {
+  // サポート用: URLに ?resetLocal=1 を付けて開くと、この端末のこのクラブの
+  // ローカルデータ(選手・試合・投稿等)を全消去してから起動する。
+  // ログイン情報・シークレットは消さない。クラウドのデータには触らない。
+  if (location.search.indexOf('resetLocal=1') >= 0) {
+    const p = getLocalPrefix();
+    Object.keys(localStorage).filter(k => k.indexOf(p) === 0).forEach(k => localStorage.removeItem(k));
+    location.replace(location.pathname);
+    return;
+  }
+
   loadLocal();
   bindEvents();
 

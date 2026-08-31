@@ -402,8 +402,12 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">画像URL（任意）</label>
-              <input class="form-input" type="url" id="result-image" placeholder="https://...">
+              <label class="form-label">写真（任意）</label>
+              <input type="file" id="result-image-file" accept="image/*" style="display:none">
+              <button type="button" class="btn btn-secondary btn-full" id="btn-result-image-pick" style="justify-content:center;gap:8px">📷 スマホから写真を選ぶ</button>
+              <div id="result-image-status" style="font-size:12px;color:var(--c-muted);margin-top:6px"></div>
+              <img id="result-image-preview" style="display:none;width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px" alt="">
+              <input class="form-input" type="url" id="result-image" placeholder="https://...（URLを直接貼ることもできます）" style="margin-top:8px;font-size:12px">
             </div>
           </div>
 
@@ -797,8 +801,12 @@
             <textarea class="form-textarea" id="post-body" rows="6" placeholder="本文を入力してください" style="min-height:120px"></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">画像URL（任意）</label>
-            <input class="form-input" type="url" id="post-image" placeholder="https://...">
+            <label class="form-label">写真（任意）</label>
+            <input type="file" id="post-image-file" accept="image/*" style="display:none">
+            <button type="button" class="btn btn-secondary btn-full" id="btn-post-image-pick" style="justify-content:center;gap:8px">📷 スマホから写真を選ぶ</button>
+            <div id="post-image-status" style="font-size:12px;color:var(--c-muted);margin-top:6px"></div>
+            <img id="post-image-preview" style="display:none;width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px" alt="">
+            <input class="form-input" type="url" id="post-image" placeholder="https://...（URLを直接貼ることもできます）" style="margin-top:8px;font-size:12px">
           </div>
           <div class="toggle-row">
             <div class="toggle-info">
@@ -948,6 +956,14 @@
         <div class="form-group">
           <label class="form-label">管理者キー（旧方式・通常は空欄のまま）</label>
           <input class="form-input" type="password" id="settings-firebase-secret" placeholder="管理者から指示があった場合のみ入力">
+        </div>
+        <div class="form-group">
+          <div class="form-label">写真アップロード用キー（imgbb・任意）</div>
+          <div style="font-size:12.5px;color:var(--c-muted);line-height:1.8;margin-bottom:10px">
+            設定すると、試合結果やニュース投稿で「📷 スマホから写真を選ぶ」が使えるようになります。<br>
+            <a href="https://api.imgbb.com/" target="_blank" rel="noopener" style="color:var(--c-primary)">api.imgbb.com</a> で無料のAPIキーを取得して貼り付けてください（クラブで1回だけ設定すればOK）。
+          </div>
+          <input class="form-input" type="password" id="settings-imgbb-key" placeholder="imgbb APIキー">
         </div>
         <div class="form-group" id="settings-gas-group">
           <div class="form-label">緊急連絡のGmail自動送信（GAS連携・任意）</div>

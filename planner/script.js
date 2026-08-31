@@ -1302,6 +1302,16 @@ function renderResult() {
   document.getElementById('result-opp-score').value = r?.oppScore ?? 0;
   document.getElementById('result-format').value = r?.format || '40分×2';
   document.getElementById('result-image').value = r?.imageUrl || '';
+  // 保存済み写真があればプレビュー表示
+  {
+    const pv = document.getElementById('result-image-preview');
+    const st = document.getElementById('result-image-status');
+    if (pv) {
+      if (r?.imageUrl) { pv.src = r.imageUrl; pv.style.display = 'block'; }
+      else { pv.removeAttribute('src'); pv.style.display = 'none'; }
+    }
+    if (st) st.textContent = '';
+  }
 
   goalRows = r?.goals ? [...r.goals] : [];
   concedeRows = r?.concedes ? [...r.concedes] : [];
@@ -3177,6 +3187,80 @@ function copyUnansweredReminder() {
   });
 }
 
+// ===== 写真アップロード（imgbb）=====
+// スマホのカメラロールから選んだ写真を縮小してimgbbへアップロードし、公開URLを得る。
+// キーはクラブごとに端末のLocalStorageへ保存する（1回設定すればOK）。
+function getImgbbStoreKey() {
+  const cfg = (typeof MP_CONFIG !== 'undefined') ? MP_CONFIG : {};
+  return cfg.clubId ? `mp_imgbb_${cfg.clubId}` : 'mp_imgbb';
+}
+function getImgbbKey() {
+  return localStorage.getItem(getImgbbStoreKey()) || '';
+}
+// 画像を長辺1200pxまで縮小してbase64にする（アップロードを軽く・速く）
+function compressImageForUpload(file, cb) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const max = 1200;
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    cb(cv.toDataURL('image/jpeg', 0.82).split(',')[1]);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); cb(null); };
+  img.src = url;
+}
+// 写真選択 → アップロード → URLを input に反映（プレビュー付き）
+function setupImageUpload(pickBtnId, fileInputId, urlInputId, statusId, previewId) {
+  const btn = document.getElementById(pickBtnId);
+  const fileInput = document.getElementById(fileInputId);
+  const urlInput = document.getElementById(urlInputId);
+  const statusEl = document.getElementById(statusId);
+  const previewEl = document.getElementById(previewId);
+  if (!btn || !fileInput || !urlInput) return;
+
+  btn.addEventListener('click', () => {
+    if (!getImgbbKey()) {
+      showToast('設定画面で「写真アップロード用キー（imgbb）」を登録してください', 'error');
+      return;
+    }
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (statusEl) statusEl.textContent = '写真を準備中…';
+    btn.disabled = true;
+    compressImageForUpload(file, (b64) => {
+      if (!b64) { if (statusEl) statusEl.textContent = '写真を読み込めませんでした'; btn.disabled = false; return; }
+      if (statusEl) statusEl.textContent = 'アップロード中…';
+      const fd = new FormData();
+      fd.append('image', b64);
+      fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(getImgbbKey()), { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(j => {
+          const link = j && j.data && (j.data.display_url || j.data.url);
+          if (!link) throw new Error('upload failed');
+          urlInput.value = link;
+          if (previewEl) { previewEl.src = link; previewEl.style.display = 'block'; }
+          if (statusEl) statusEl.textContent = '✅ アップロード完了';
+          showToast('写真をアップロードしました', 'success');
+        })
+        .catch(() => {
+          if (statusEl) statusEl.textContent = '';
+          showToast('アップロードに失敗しました。キーと通信環境をご確認ください', 'error');
+        })
+        .finally(() => { btn.disabled = false; fileInput.value = ''; });
+    });
+  });
+}
+
 // ===== SETTINGS =====
 function renderSettingsPage() {
   const s = getSettings();
@@ -3199,11 +3283,15 @@ function renderSettingsPage() {
   const gasKeyEl = document.getElementById('settings-gas-key');
   if (gasUrlEl) gasUrlEl.value = s.gasUrl || '';
   if (gasKeyEl) gasKeyEl.value = s.gasKey || '';
+  const imgbbEl = document.getElementById('settings-imgbb-key');
+  if (imgbbEl) imgbbEl.value = getImgbbKey();
 }
 function saveSettingsForm() {
   const secret = document.getElementById('settings-firebase-secret').value.trim();
   const gasUrl = (document.getElementById('settings-gas-url')?.value || '').trim();
   const gasKey = (document.getElementById('settings-gas-key')?.value || '').trim();
+  const imgbb = (document.getElementById('settings-imgbb-key')?.value || '').trim();
+  localStorage.setItem(getImgbbStoreKey(), imgbb);
   saveSettings({ firebaseSecret: secret, gasUrl, gasKey });
   emergencyGroupsLoaded = false; // GAS設定が変わったらグループを取り直す
   showToast('設定を保存しました', 'success');
@@ -3466,6 +3554,10 @@ function bindEvents() {
   document.getElementById('btn-save-settings')?.addEventListener('click', saveSettingsForm);
   document.getElementById('btn-auth-login')?.addEventListener('click', loginSettingsForm);
   document.getElementById('btn-auth-logout')?.addEventListener('click', logoutSettingsForm);
+
+  // 写真アップロード（試合結果・ニュース投稿）
+  setupImageUpload('btn-result-image-pick', 'result-image-file', 'result-image', 'result-image-status', 'result-image-preview');
+  setupImageUpload('btn-post-image-pick', 'post-image-file', 'post-image', 'post-image-status', 'post-image-preview');
   document.getElementById('btn-load-cloud')?.addEventListener('click', loadFromCloud);
   document.getElementById('btn-save-cloud')?.addEventListener('click', saveToCloud);
   document.getElementById('btn-reset-operational')?.addEventListener('click', resetOperationalData);
@@ -3967,6 +4059,8 @@ function snsSetThumb() {
   if (snsOrigin === 'match') {
     const imgInput = document.getElementById('result-image');
     if (imgInput) imgInput.value = lastSnsThumb;
+    const pv = document.getElementById('result-image-preview');
+    if (pv) { pv.src = lastSnsThumb; pv.style.display = 'block'; }
     showToast('結果フォームの画像欄に設定しました。「結果を保存」を押すと記事に反映されます', 'success');
   } else if (snsOrigin === 'schedule') {
     announcementSnsImage = lastSnsThumb;

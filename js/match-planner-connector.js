@@ -245,12 +245,21 @@ const AuroraConnector = (function () {
 
     var matchKeys = {};
     fromMatches.forEach(function (m) { matchKeys[m.date + '|' + (m.opponent || '')] = true; });
+    // 同じ試合が matches(結果あり) と schedules(予定) の両方にある場合、
+    // 結果が出ているものは「次の試合」に出さない
+    var doneKeys = {};
+    matches.forEach(function (m) {
+      if (m.result && m.result.myScore != null && m.result.oppScore != null) {
+        doneKeys[m.date + '|' + (m.opponent || '')] = true;
+      }
+    });
 
     var fromSchedules = (schedules || [])
       .filter(function (sc) {
         var d = toDate(sc.date);
         if (!d || d < today) return false;
-        return !matchKeys[sc.date + '|' + (sc.opponent || '')];
+        var key = sc.date + '|' + (sc.opponent || '');
+        return !matchKeys[key] && !doneKeys[key];
       })
       .map(scheduleToMatchShape);
 

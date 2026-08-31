@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/alaserio.css?v=20260830b">
+  <link rel="stylesheet" href="css/alaserio.css?v=20260831">
 </head>
 <body>
 
@@ -105,8 +105,8 @@
 
       <!-- 日程・結果一覧 -->
       <div class="sec-head">
-        <span class="sec-en" style="font-size:26px;">SCHEDULE &amp; RESULTS</span>
-        <span class="sec-ja">日程・結果一覧</span>
+        <span class="sec-en" style="font-size:26px;">RESULTS</span>
+        <span class="sec-ja">試合結果一覧</span>
       </div>
       <div id="sched-groups"><p class="no-data">読み込み中...</p></div>
 
@@ -158,7 +158,7 @@
   </div>
 
   <script src="js/config-loader.js"></script>
-  <script src="js/mobile-experience.js?v=20260807c"></script>
+  <script src="js/mobile-experience.js?v=20260831"></script>
   <script>
     document.getElementById('footer-year').textContent = new Date().getFullYear();
     var mobileNav = document.getElementById('mobile-nav');
@@ -277,15 +277,24 @@
         var d = toDate(m.date);
         return d && d >= today;
       });
+      // 予定と重複させないための鍵。結果が登録済みの試合も含めて突き合わせる
+      // （同じ試合が matches と schedules の両方にあるケースがあるため）
       var matchKeys = {};
       fromMatches.forEach(function(m){ matchKeys[m.date + '|' + (m.opponent||'')] = true; });
+      var doneKeys = {};
+      state.allMatches.forEach(function(m){
+        if(m.result && m.result.myScore != null && m.result.oppScore != null){
+          doneKeys[m.date + '|' + (m.opponent||'')] = true;
+        }
+      });
 
       var fromSchedules = state.allSchedules
         .filter(function(sc){
           var d = toDate(sc.date);
           if(!d || d < today) return false;
           if(!matchesTab(sc.category, cat)) return false;
-          return !matchKeys[sc.date + '|' + (sc.opponent||'')];
+          var key = sc.date + '|' + (sc.opponent||'');
+          return !matchKeys[key] && !doneKeys[key];
         })
         .map(scheduleToMatchShape);
 
@@ -307,10 +316,12 @@
     }
 
     function renderGroups(){
-      var matches = catMatches().slice()
+      // 結果が出た試合のみ（未消化の試合は上の「今後の試合」に表示されるため重複させない）
+      var matches = catMatches()
+        .filter(function(m){ return m.result && m.result.myScore != null && m.result.oppScore != null; })
         .sort(function(a,b){ return (toDate(b.date)||0) - (toDate(a.date)||0); });
       var el = document.getElementById('sched-groups');
-      if(matches.length === 0){ el.innerHTML = '<p class="no-data">表示できる試合がありません</p>'; return; }
+      if(matches.length === 0){ el.innerHTML = '<p class="no-data">まだ試合結果がありません</p>'; return; }
 
       // 大会名ごとにグループ化
       var groups = {}, order = [];

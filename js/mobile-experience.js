@@ -125,9 +125,16 @@
     }
 
     /* 今日試合なし → 14日以内の次の試合カウントダウン */
+    /* 同じ試合が matches(結果あり) と schedules(予定) の両方にある場合は予定側を採用しない */
+    var doneKeys = {};
+    matches.forEach(function (m) {
+      if (m.result && m.result.myScore != null) doneKeys[m.date + '|' + (m.opponent || '')] = true;
+    });
     var upcoming = [];
     schedules.forEach(function (sc) {
-      if (sc.date > todayStr && isMatchLike(sc.type)) upcoming.push({ date: sc.date, time: sc.time || '', opponent: sc.opponent || '', comp: sc.competition || sc.type || '', category: sc.category || '' });
+      if (sc.date > todayStr && isMatchLike(sc.type) && !doneKeys[sc.date + '|' + (sc.opponent || '')]) {
+        upcoming.push({ date: sc.date, time: sc.time || '', opponent: sc.opponent || '', comp: sc.competition || sc.type || '', category: sc.category || '' });
+      }
     });
     matches.forEach(function (m) {
       var hasResult = m.result && m.result.myScore != null;

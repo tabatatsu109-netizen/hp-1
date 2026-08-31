@@ -8,5 +8,5 @@ const MP_CONFIG = {
   firebaseApiKey: 'AIzaSyAZgkCjpPQpjrc25Q-xxXhLRxXpummUKmM',  // Firebase の Web APIキー（クラブ別ログイン用・公開可）
   firebaseSecret: '',  // 旧方式の管理者キー用（通常は空欄のまま）
 
-  stats: { enabled: true },  // プレミアム: 大会マスター・クラブスタッツ（大会別/カテゴリー別集計・得点/アシストランキング）
+  hideFeatures: ['emergency', 'survey'],  // 緊急連絡・アンケートは使わないため非表示（GAS設定欄も消える）
 };

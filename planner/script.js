@@ -722,6 +722,7 @@ function renderSchedCard(sc, today) {
           ${resultPosted ? '<span class="posted-pill">結果公開済み</span>' : ''}
           ${!isPast && isMatchLike ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();startAnnouncement('${sc.id}')">📢 告知</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSnsFromSchedId('${sc.id}')">📸 SNS画像</button>` : ''}
           ${isPast && isMatchLike && !resultPosted ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">🏆 結果を登録</button>` : ''}
+          ${isPast && isMatchLike && resultPosted ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">✏️ 結果を編集</button>` : ''}
           <button class="btn btn-ghost btn-sm" style="color:var(--c-red);font-size:12px" onclick="event.stopPropagation();deleteSchedule('${sc.id}')">削除</button>
         </div>
       </div>
@@ -909,7 +910,7 @@ function startResultFromSchedule(schedId) {
   openMatchCreateModal({
     opponent: sc.opponent || '',
     date: sc.date || '',
-    type: sc.type === '大会' ? 'フェスティバル' : '公式戦',
+    type: '公式戦',
     category: sc.category || '',
     competition: sc.competition || '',
     venue: sc.venue || '',
@@ -1296,6 +1297,7 @@ let concedeRows = [];
 function renderResult() {
   if (!currentMatch) return;
   const r = currentMatch.result;
+  document.getElementById('result-type').value = currentMatch.type || '公式戦';
   document.getElementById('result-my-score').value = r?.myScore ?? 0;
   document.getElementById('result-opp-score').value = r?.oppScore ?? 0;
   document.getElementById('result-format').value = r?.format || '40分×2';
@@ -1355,6 +1357,8 @@ function saveResult() {
   const format = document.getElementById('result-format').value;
   const imageUrl = document.getElementById('result-image').value;
   const resultStr = my > opp ? '勝利' : my < opp ? '敗戦' : '引き分け';
+
+  currentMatch.type = document.getElementById('result-type').value;
 
   currentMatch.result = {
     myScore: my,
@@ -4744,6 +4748,22 @@ function initApp() {
     document.querySelectorAll('[data-nav="page-stats"], [data-nav="page-competitions"]').forEach(el => { el.style.display = 'none'; });
   }
   renderCompetitionDatalist();
+
+  // 使わない機能をメニューから隠す（mp-config: hideFeatures: ['emergency','survey'] など）
+  // 機能・データは残したまま非表示にするだけ
+  {
+    const hideMap = { emergency: 'page-emergency', survey: 'page-survey' };
+    const hf = (typeof MP_CONFIG !== 'undefined' && Array.isArray(MP_CONFIG.hideFeatures)) ? MP_CONFIG.hideFeatures : [];
+    hf.forEach(k => {
+      const pg = hideMap[k];
+      if (pg) document.querySelectorAll(`[data-nav="${pg}"]`).forEach(el => { el.style.display = 'none'; });
+    });
+    // 緊急連絡を隠すクラブは、設定画面のGmail自動送信(GAS)欄も不要なので隠す
+    if (hf.includes('emergency')) {
+      const gasGroup = document.getElementById('settings-gas-group');
+      if (gasGroup) gasGroup.style.display = 'none';
+    }
+  }
 
   // 試合管理を使わないクラブ向け（mp-config: hideMatchManagement: true）
   // メニューから隠すだけで機能・データは残す。結果登録はスケジュール起点でできる

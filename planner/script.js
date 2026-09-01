@@ -351,6 +351,7 @@ function saveLocal() {
 
 let _cloudSaveTimer = null;
 function scheduleCloudSave() {
+  if (location.search.indexOf('rescue=1') >= 0) return; // レスキューモード中は保存しない
   const s = getSettings();
   if (!isCloudConfigured(s)) return;
   clearTimeout(_cloudSaveTimer);
@@ -450,6 +451,7 @@ async function loadFromCloud() {
   }
 }
 async function saveToCloud() {
+  if (location.search.indexOf('rescue=1') >= 0) { showToast('レスキューモード中はクラウド保存できません', 'error'); return; }
   const s = getSettings();
   if (!isCloudConfigured(s)) { showToast('設定画面でログイン（またはキー設定）をしてください', 'error'); return; }
   setSyncIcon('💾');
@@ -4910,6 +4912,15 @@ function initApp() {
       bnav.innerHTML = '<span class="bnav-icon">🏆</span><span class="bnav-label">試合結果</span>';
       bottomNavPages.push('page-result-entry');
     }
+  }
+
+  // レスキューモード: ?rescue=1 で開くと、クラウドと一切同期しない（読み込みも保存もしない）。
+  // 端末に残っているローカルデータをそのまま閲覧できる（データ復旧用）
+  if (location.search.indexOf('rescue=1') >= 0) {
+    setSyncIcon('🔒');
+    showToast('レスキューモード: クラウド同期を停止中（この端末のデータを表示しています）', 'info');
+    showPage('page-dashboard');
+    return;
   }
 
   // Auto-load from cloud if configured

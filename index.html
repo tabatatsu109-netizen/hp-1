@@ -303,8 +303,8 @@
     </div>
   </div>
 
-  <script src="js/config-loader.js?v=20260831"></script>
-  <script src="js/match-planner-connector.js?v=20260831"></script>
+  <script src="js/config-loader.js?v=20261022a"></script>
+  <script src="js/match-planner-connector.js?v=20261022a"></script>
   <script src="js/mobile-experience.js?v=20260831"></script>
   <script>
     document.getElementById('footer-year').textContent = new Date().getFullYear();
@@ -335,10 +335,8 @@
       function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
       var posColor = { GK: '#b8870b', DF: '#2a6fd6', MF: '#009a44', FW: '#d24b52' };
       ConfigLoader.load().then(function(c){
-        var fbUrl = (c.integration && c.integration.firebaseUrl) || 'https://hp-1-d7bce-default-rtdb.asia-southeast1.firebasedatabase.app';
-        var clubId = (c.integration && c.integration.firebaseClubId) || 'alaserio';
-        return fetch(fbUrl + '/clubs/' + clubId + '.json');
-      }).then(function(r){ return r.json(); }).then(function(data){
+        return ConfigLoader.fetchClubNodes(c, ['players']);
+      }).then(function(data){
         var track = document.getElementById('pl-track');
         var players = ((data && data.players) || [])
           .filter(function(p){ return p && p.name && String(p.category||'').toLowerCase() !== 'staff'; })

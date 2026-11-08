@@ -359,7 +359,7 @@ function scheduleCloudSave() {
     try {
       setSyncIcon('💾');
       const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildCloudPayload()),
       });
@@ -457,7 +457,7 @@ async function saveToCloud() {
   setSyncIcon('💾');
   try {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildCloudPayload()),
     });
@@ -592,13 +592,24 @@ function getCatBadgeClass(cat) {
   if (n >= 10) return 'cat-u12';
   return 'cat-u9';
 }
+// PK戦（result.pk = {my, opp}）があれば同点でもPKの点差で勝敗を判定する
+function matchOutcomeCode(result) {
+  if (!result) return null;
+  const my = result.myScore, op = result.oppScore;
+  if (my == null || op == null) return null;
+  if (my !== op) return my > op ? 'WIN' : 'LOSS';
+  if (result.pk && result.pk.my != null && result.pk.opp != null && result.pk.my !== result.pk.opp) {
+    return result.pk.my > result.pk.opp ? 'WIN' : 'LOSS';
+  }
+  return 'DRAW';
+}
+function isPkDecided(result) {
+  return !!(result && result.myScore === result.oppScore && result.pk &&
+    result.pk.my != null && result.pk.opp != null && result.pk.my !== result.pk.opp);
+}
 function getResultStr(m) {
   if (!m.result) return null;
-  const my = m.result.myScore, op = m.result.oppScore;
-  if (my == null) return null;
-  if (my > op) return 'WIN';
-  if (my < op) return 'LOSS';
-  return 'DRAW';
+  return matchOutcomeCode(m.result);
 }
 function getResultBadgeClass(str) {
   if (str === 'WIN') return 'rb-win result-win';
@@ -693,7 +704,7 @@ function renderDashboard() {
             <div class="result-logo logo-home">${(s.clubName||'G')[0]}</div>
             <div class="result-logo logo-away">${(m.opponent||'相')[0]}</div>
           </div>
-          <span class="result-row-score">${m.result.myScore} - ${m.result.oppScore}</span>
+          <span class="result-row-score">${m.result.myScore} - ${m.result.oppScore}${isPkDecided(m.result) ? ` <small style="color:var(--c-muted)">(PK ${m.result.pk.my}-${m.result.pk.opp})</small>` : ''}</span>
           <span class="result-badge ${cls}">${rstr}</span>
         </div>
       `;
@@ -821,6 +832,10 @@ function saveScheduleForm() {
   };
   if (editingSchedId) {
     const idx = schedules.findIndex(s => s.id === editingSchedId);
+    // 試合告知の手直し本文は編集しても引き継ぐ
+    if (idx >= 0) {
+      ['annMode', 'annCustom', 'annCustomSnap'].forEach(k => { if (schedules[idx][k] != null) sc[k] = schedules[idx][k]; });
+    }
     if (idx >= 0) schedules[idx] = sc;
   } else {
     schedules.push(sc);
@@ -830,6 +845,11 @@ function saveScheduleForm() {
   closeModal('modal-schedule');
   showToast(editingSchedId ? '更新しました' : '追加しました', 'success');
   renderSchedule();
+  // 試合告知の画面から編集した場合は、告知の表示も新しい内容にする
+  if (editingSchedId && editingSchedId === selectedAnnSchedId && currentPage === 'page-announcement') {
+    renderAnnouncement();
+    if (sc.posted) showToast('予定を更新しました。ホームページの告知を直すには「ホームページに告知する」を押してください', 'success');
+  }
   editingSchedId = null;
 }
 function deleteSchedule(id) {
@@ -867,7 +887,7 @@ function renderMatches() {
         <div class="match-card-body">
           <span class="match-card-opp">${m.opponent||'---'}</span>
           ${rstr
-            ? `<span class="match-card-score">${m.result.myScore} - ${m.result.oppScore}</span><span class="match-card-result ${rcls}">${rstr}</span>`
+            ? `<span class="match-card-score">${m.result.myScore} - ${m.result.oppScore}${isPkDecided(m.result) ? ` <small>(PK ${m.result.pk.my}-${m.result.pk.opp})</small>` : ''}</span><span class="match-card-result ${rcls}">${rstr}</span>`
             : '<span class="no-result-text">結果未登録</span>'}
         </div>
       </div>
@@ -1338,16 +1358,26 @@ function renderResult() {
   if (!currentMatch) return;
   const r = currentMatch.result;
   document.getElementById('result-type').value = currentMatch.type || '公式戦';
+  document.getElementById('result-category').value = currentMatch.category || '';
   document.getElementById('result-my-score').value = r?.myScore ?? 0;
   document.getElementById('result-opp-score').value = r?.oppScore ?? 0;
   document.getElementById('result-format').value = r?.format || '40分×2';
   document.getElementById('result-image').value = r?.imageUrl || '';
   updatePhotoPreview('result');
 
+  document.getElementById('result-pk-enabled').checked = !!r?.pk;
+  document.getElementById('result-pk-my').value = r?.pk?.my ?? 0;
+  document.getElementById('result-pk-opp').value = r?.pk?.opp ?? 0;
+  togglePkFields();
+
   goalRows = r?.goals ? [...r.goals] : [];
   concedeRows = r?.concedes ? [...r.concedes] : [];
   renderGoalRows();
   renderConcedeRows();
+}
+function togglePkFields() {
+  const enabled = document.getElementById('result-pk-enabled').checked;
+  document.getElementById('result-pk-scores').style.display = enabled ? '' : 'none';
 }
 function renderGoalRows() {
   const el = document.getElementById('goals-body');
@@ -1397,9 +1427,16 @@ function saveResult() {
   const opp = parseInt(document.getElementById('result-opp-score').value) || 0;
   const format = document.getElementById('result-format').value;
   const imageUrl = document.getElementById('result-image').value;
-  const resultStr = my > opp ? '勝利' : my < opp ? '敗戦' : '引き分け';
+  const pkEnabled = document.getElementById('result-pk-enabled').checked;
+  const pkMy = parseInt(document.getElementById('result-pk-my').value) || 0;
+  const pkOpp = parseInt(document.getElementById('result-pk-opp').value) || 0;
+  // PKは同点のときだけ意味を持つ（同点でなければ無視する）
+  const pk = (pkEnabled && my === opp) ? { my: pkMy, opp: pkOpp } : null;
+  const outcome = matchOutcomeCode({ myScore: my, oppScore: opp, pk });
+  const resultStr = outcome === 'WIN' ? '勝利' : outcome === 'LOSS' ? '敗戦' : '引き分け';
 
   currentMatch.type = document.getElementById('result-type').value;
+  currentMatch.category = document.getElementById('result-category').value;
 
   currentMatch.result = {
     myScore: my,
@@ -1407,12 +1444,17 @@ function saveResult() {
     format,
     imageUrl,
     resultStr,
+    pk,
     goals: [...goalRows.filter(g => g.scorer)],
     concedes: [...concedeRows.filter(c => c.minute)],
     publish: currentMatch.result?.publish ?? true,
     makeNews: currentMatch.result?.makeNews ?? true,
     grandePosted: currentMatch.result?.grandePosted || false,
     grandeNewsId: currentMatch.result?.grandeNewsId || null,
+    // 記事プレビューで手直しした文面（結果を保存し直しても消さない）
+    articleMode: currentMatch.result?.articleMode || null,
+    customArticle: currentMatch.result?.customArticle || null,
+    customArticleBase: currentMatch.result?.customArticleBase || null,
   };
   saveCurrentMatch();
   showToast('結果を保存しました', 'success');
@@ -1454,9 +1496,83 @@ function renderPublish() {
     unpublishBtn && (unpublishBtn.style.display = 'none');
   }
 
-  const article = buildNewsArticle(currentMatch);
-  if (articleText) articleText.textContent = article;
+  renderArticlePreview();
   if (articlePreview) articlePreview.classList.remove('hidden');
+}
+
+// ===== 記事プレビューの編集 =====
+// result.articleMode: 'custom'＝手直しした文面を使う / 'auto'＝自動生成に戻した / null＝従来どおり
+// （null のときは、投稿履歴で編集済みの記事があればその文面を表示する）
+function linkedMatchPost(m) {
+  return m?.result?.grandeNewsId ? posts.find(p => p.id === m.result.grandeNewsId) : null;
+}
+function currentArticleText(m) {
+  const r = m.result;
+  if (r.articleMode === 'custom' && r.customArticle != null) return r.customArticle;
+  if (r.articleMode !== 'auto') {
+    const p = linkedMatchPost(m);
+    if (p?.edited && p.body) return p.body;
+  }
+  return buildNewsArticle(m);
+}
+function isArticleEdited(m) {
+  const r = m.result;
+  if (r.articleMode === 'custom') return true;
+  return r.articleMode !== 'auto' && !!linkedMatchPost(m)?.edited;
+}
+function renderArticlePreview() {
+  if (!currentMatch?.result) return;
+  const r = currentMatch.result;
+  const edited = isArticleEdited(currentMatch);
+  const textEl = document.getElementById('hp-article-text');
+  if (textEl) textEl.textContent = currentArticleText(currentMatch);
+  const label = document.getElementById('hp-article-label');
+  if (label) label.textContent = edited ? '記事プレビュー' : '自動生成記事プレビュー';
+  document.getElementById('hp-article-badge')?.classList.toggle('hidden', !edited);
+  // 手直し後にスコア・得点者などを変えた場合は、自動生成に戻すか案内する
+  const stale = r.articleMode === 'custom' && r.customArticleBase != null
+    && r.customArticleBase !== buildNewsArticle(currentMatch);
+  document.getElementById('hp-article-stale')?.classList.toggle('hidden', !stale);
+  closeArticleEditor();
+}
+function openArticleEditor() {
+  if (!currentMatch?.result) return;
+  const input = document.getElementById('hp-article-input');
+  input.value = currentArticleText(currentMatch);
+  document.getElementById('hp-article-text').classList.add('hidden');
+  document.getElementById('hp-article-editor').classList.remove('hidden');
+  document.getElementById('btn-article-edit').classList.add('hidden');
+  input.focus();
+}
+function closeArticleEditor() {
+  document.getElementById('hp-article-text')?.classList.remove('hidden');
+  document.getElementById('hp-article-editor')?.classList.add('hidden');
+  document.getElementById('btn-article-edit')?.classList.remove('hidden');
+}
+function saveArticleEdit() {
+  if (!currentMatch?.result) return;
+  const text = document.getElementById('hp-article-input').value.replace(/\s+$/, '');
+  if (!text.trim()) { showToast('本文が空です。元に戻す場合は「自動生成に戻す」を押してください', 'error'); return; }
+  const r = currentMatch.result;
+  const auto = buildNewsArticle(currentMatch);
+  if (text === auto.replace(/\s+$/, '')) {
+    r.articleMode = 'auto'; r.customArticle = null; r.customArticleBase = null;
+  } else {
+    r.articleMode = 'custom'; r.customArticle = text; r.customArticleBase = auto;
+  }
+  saveCurrentMatch();
+  renderArticlePreview();
+  showToast(r.grandePosted ? '記事を保存しました。「ホームページに公開する」で反映されます' : '記事を保存しました', 'success');
+}
+function resetArticleToAuto() {
+  if (!currentMatch?.result) return;
+  showConfirm('自動生成に戻す', '手直しした文章を消して、試合データから作った文章に戻しますか？', '戻す', () => {
+    const r = currentMatch.result;
+    r.articleMode = 'auto'; r.customArticle = null; r.customArticleBase = null;
+    saveCurrentMatch();
+    renderArticlePreview();
+    showToast(r.grandePosted ? '自動生成に戻しました。「ホームページに公開する」で反映されます' : '自動生成に戻しました', 'success');
+  });
 }
 function fmtDateJP(s) {
   if (!s) return '';
@@ -1464,6 +1580,31 @@ function fmtDateJP(s) {
   return `${d.getMonth()+1}月${d.getDate()}日`;
 }
 
+// 得点者の行を作る。同じ選手の複数得点は1行にまとめる
+// 例) 菊原瑛斗（3得点）／菊原瑛斗（2得点：5分・30分／アシスト：清水頼希）
+function formatScorerLines(goals) {
+  const groups = [];
+  (goals || []).forEach(g => {
+    if (!g.scorer) return;
+    const ex = groups.find(x => x.name === g.scorer);
+    if (ex) ex.goals.push(g); else groups.push({ name: g.scorer, goals: [g] });
+  });
+  return groups.map(({ name, goals: gs }) => {
+    if (gs.length === 1) {
+      const g = gs[0];
+      let line = name;
+      if (g.minute) line = `${g.minute}分　${line}`;
+      if (g.assist) line += `（アシスト：${g.assist}）`;
+      return line;
+    }
+    const minutes = gs.map(g => g.minute).filter(Boolean).map(x => `${x}分`);
+    const assists = gs.map(g => g.assist).filter(Boolean);
+    let detail = `${gs.length}得点`;
+    if (minutes.length) detail += `：${minutes.join('・')}`;
+    if (assists.length) detail += `／アシスト：${assists.join('・')}`;
+    return `${name}（${detail}）`;
+  });
+}
 function buildNewsArticle(m) {
   if (!m.result) return '';
   const r = m.result;
@@ -1481,17 +1622,14 @@ function buildNewsArticle(m) {
   article += '\n';
 
   // スコア
-  article += `試合結果：${s.clubName||'自チーム'} ${r.myScore} - ${r.oppScore} ${m.opponent}\n`;
+  article += `試合結果：${s.clubName||'自チーム'} ${r.myScore} - ${r.oppScore} ${m.opponent}`;
+  if (isPkDecided(r)) article += `（PK戦 ${r.pk.my} - ${r.pk.opp}）`;
+  article += '\n';
 
   // 得点者
   if (r.goals && r.goals.length > 0) {
     article += '\n【得点者】\n';
-    r.goals.forEach(g => {
-      let line = g.scorer || '';
-      if (g.minute) line = `${g.minute}分　${line}`;
-      if (g.assist) line += `（アシスト：${g.assist}）`;
-      article += line + '\n';
-    });
+    article += formatScorerLines(r.goals).join('\n') + '\n';
   }
 
   // 会場
@@ -1504,7 +1642,8 @@ function buildNewsArticle(m) {
 function buildNewsPost(m) {
   const s = getSettings();
   const r = m.result;
-  const resultStr = r.myScore > r.oppScore ? '勝利' : r.myScore < r.oppScore ? '敗戦' : '引き分け';
+  const outcome = matchOutcomeCode(r);
+  const resultStr = outcome === 'WIN' ? '勝利' : outcome === 'LOSS' ? '敗戦' : '引き分け';
   const scorers = (r.goals||[]).reduce((acc, g) => {
     if (!g.scorer) return acc;
     const ex = acc.find(x => x.name === g.scorer);
@@ -1515,7 +1654,7 @@ function buildNewsPost(m) {
   return {
     // 試合自身のidを使う（同じ日・同じ大会名の試合が複数あってもIDが衝突しないように）
     id: `match_${m.id}`,
-    title: `${fmtDateFull(m.date)} vs ${m.opponent} ${r.myScore}-${r.oppScore} ${resultStr}`,
+    title: `${fmtDateFull(m.date)} vs ${m.opponent} ${r.myScore}-${r.oppScore}${isPkDecided(r) ? `(PK${r.pk.my}-${r.pk.opp})` : ''} ${resultStr}`,
     category: m.category || 'クラブニュース',
     type: '試合結果',
     date: m.date,
@@ -1526,6 +1665,12 @@ function buildNewsPost(m) {
     scorers,
     published: r.publish !== false,
   };
+}
+// 投稿履歴から手で編集した記事（edited）は、再公開しても文面・写真を上書きしない。
+// スコアや公開状態などのデータ部分だけ新しい内容に差し替える
+function keepManualEdit(old, fresh) {
+  if (!old || !old.edited) return fresh;
+  return { ...fresh, title: old.title, body: old.body, category: old.category, image: old.image, edited: true };
 }
 async function publishToHP() {
   if (!currentMatch?.result) { showToast('結果を先に保存してください', 'error'); return; }
@@ -1542,7 +1687,12 @@ async function publishToHP() {
   if (currentMatch.result.makeNews) {
     const post = buildNewsPost(currentMatch);
     const localIdx = posts.findIndex(p => p.id === post.id);
-    if (localIdx >= 0) posts[localIdx] = post; else posts.unshift(post);
+    let next = localIdx >= 0 ? keepManualEdit(posts[localIdx], post) : post;
+    // 記事プレビューで手直しした文面／自動生成に戻した文面を優先する
+    const mode = currentMatch.result.articleMode;
+    if (mode === 'custom' && currentMatch.result.customArticle) next = { ...next, body: currentMatch.result.customArticle, edited: true };
+    else if (mode === 'auto') next = { ...next, body: post.body };
+    if (localIdx >= 0) posts[localIdx] = next; else posts.unshift(next);
   }
   currentMatch.result.grandePosted = true;
   currentMatch.result.grandeNewsId = buildNewsPost(currentMatch).id;
@@ -1552,7 +1702,7 @@ async function publishToHP() {
   setSyncIcon('💾');
   try {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildCloudPayload()),
     });
@@ -1582,7 +1732,7 @@ async function unpublish() {
   setSyncIcon('💾');
   try {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildCloudPayload()),
     });
@@ -2272,9 +2422,10 @@ function confirmPlayerImport() {
 }
 
 // ===== NEWS =====
+let editingPostId = null;
 function renderNews() {
   const today = todayStr();
-  document.getElementById('post-date').value = today;
+  if (!editingPostId) document.getElementById('post-date').value = today;
   renderPostHistory();
 }
 function switchPostTab(tabId) {
@@ -2297,26 +2448,110 @@ function renderPostHistory() {
         <div class="post-hist-title">${p.title}</div>
         <div class="post-hist-meta">${fmtDate(p.date)} · ${p.type} · ${p.published ? '公開中' : '下書き'}</div>
       </div>
+      <button class="post-hist-edit" onclick="editPost('${p.id}')">編集</button>
       <button class="post-hist-del" onclick="deletePost('${p.id}')">削除</button>
     </div>
   `).join('');
+}
+// 投稿履歴の「編集」：内容を作成フォームに読み込む（試合結果・試合告知の記事も直せる）
+function editPost(id) {
+  const p = posts.find(x => x.id === id);
+  if (!p) return;
+  editingPostId = id;
+  document.getElementById('post-title').value = p.title || '';
+  document.getElementById('post-body').value = p.body || '';
+  document.getElementById('post-date').value = p.date || todayStr();
+  document.getElementById('post-image').value = p.image || '';
+  document.getElementById('post-publish').checked = p.published !== false;
+  updatePhotoPreview('post');
+
+  // カテゴリー：選択肢に無い値（U12 など）は一時的に追加して保つ
+  const catSel = document.getElementById('post-category');
+  catSel.querySelectorAll('option[data-temp]').forEach(o => o.remove());
+  if (p.category && ![...catSel.options].some(o => o.value === p.category)) {
+    const o = document.createElement('option');
+    o.value = o.textContent = p.category;
+    o.dataset.temp = '1';
+    catSel.appendChild(o);
+  }
+  catSel.value = p.category || catSel.options[0].value;
+
+  // 投稿タイプ：ボタンに無い種別（試合結果・試合告知）は変更させず元のまま保つ
+  const typeBtns = [...document.querySelectorAll('.post-type-btn')];
+  const selectable = typeBtns.some(b => b.dataset.ptype === p.type);
+  if (selectable) currentPostType = p.type;
+  typeBtns.forEach(b => b.classList.toggle('active', selectable && b.dataset.ptype === p.type));
+  document.getElementById('post-type-row').style.display = selectable ? '' : 'none';
+
+  const banner = document.getElementById('post-edit-banner');
+  if (banner) {
+    banner.classList.remove('hidden');
+    document.getElementById('post-edit-banner-text').textContent =
+      `✏️ 編集中：${p.title || ''}` + (selectable ? '' : `（${p.type}）`);
+  }
+  document.getElementById('btn-post-send').textContent = '💾 更新する';
+  document.getElementById('post-preview-area')?.classList.add('hidden');
+  switchPostTab('compose');
+  banner?.scrollIntoView({ block: 'center' });
+}
+function cancelPostEdit(silent) {
+  editingPostId = null;
+  document.getElementById('post-edit-banner')?.classList.add('hidden');
+  document.getElementById('post-type-row').style.display = '';
+  document.getElementById('post-category').querySelectorAll('option[data-temp]').forEach(o => o.remove());
+  currentPostType = 'お知らせ';
+  document.querySelectorAll('.post-type-btn').forEach(b => b.classList.toggle('active', b.dataset.ptype === currentPostType));
+  document.getElementById('post-title').value = '';
+  document.getElementById('post-body').value = '';
+  document.getElementById('post-image').value = '';
+  document.getElementById('post-date').value = todayStr();
+  document.getElementById('post-publish').checked = true;
+  updatePhotoPreview('post');
+  document.getElementById('btn-post-send').textContent = '🌐 投稿する';
+  if (!silent) showToast('編集をやめました');
 }
 async function sendPost() {
   const title = document.getElementById('post-title').value.trim();
   const body = document.getElementById('post-body').value.trim();
   const date = document.getElementById('post-date').value;
   if (!title) { showToast('タイトルを入力してください', 'error'); return; }
-  const post = {
-    id: `${date.replace(/-/g,'')}_${encodeURIComponent(title).slice(0,20)}_${Date.now()}`,
+  const editing = editingPostId ? posts.find(p => p.id === editingPostId) : null;
+  const form = {
     title,
     category: document.getElementById('post-category').value,
-    type: currentPostType,
     date,
     body,
     image: document.getElementById('post-image').value || null,
-    source: 'manualPost',
     published: document.getElementById('post-publish').checked,
   };
+  let post;
+  if (editing) {
+    // 元の記事のデータ（id・スコア・得点者・種別など）は残し、フォームの項目だけ上書き
+    const typeEditable = [...document.querySelectorAll('.post-type-btn')].some(b => b.dataset.ptype === editing.type);
+    post = { ...editing, ...form, type: typeEditable ? currentPostType : editing.type, edited: true };
+    // 試合結果の記事なら、試合の記事プレビュー側にも同じ文面を控える
+    if (editing.source === 'matchPlanner') {
+      [matches.find(x => `match_${x.id}` === editing.id), currentMatch?.id && `match_${currentMatch.id}` === editing.id ? currentMatch : null]
+        .forEach(m => {
+          if (!m?.result) return;
+          m.result.articleMode = 'custom';
+          m.result.customArticle = body;
+          m.result.customArticleBase = buildNewsArticle(m);
+        });
+    }
+    // 試合告知の記事なら、予定側にも同じ本文を控える（告知画面から投稿し直しても消えない）
+    if (editing.source === 'announcement') {
+      const sc = schedules.find(x => `ann_${x.id}` === editing.id);
+      if (sc) setAnnCustom(sc, body);
+    }
+  } else {
+    post = {
+      id: `${date.replace(/-/g,'')}_${encodeURIComponent(title).slice(0,20)}_${Date.now()}`,
+      ...form,
+      type: currentPostType,
+      source: 'manualPost',
+    };
+  }
 
   const s = getSettings();
   const idx = posts.findIndex(p => p.id === post.id);
@@ -2325,6 +2560,7 @@ async function sendPost() {
 
   if (!isCloudConfigured(s)) {
     showToast('下書きとして保存しました（クラウド未設定）');
+    if (editing) cancelPostEdit(true);
     renderPostHistory();
     return;
   }
@@ -2332,21 +2568,23 @@ async function sendPost() {
   setSyncIcon('💾');
   try {
     const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildCloudPayload()),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setSyncIcon('☁️');
-    showToast('投稿しました！', 'success');
+    showToast(editing ? '記事を更新しました！' : '投稿しました！', 'success');
     document.getElementById('post-title').value = '';
     document.getElementById('post-body').value = '';
     document.getElementById('post-image').value = '';
     updatePhotoPreview('post');
+    if (editing) { cancelPostEdit(true); switchPostTab('history'); }
     renderPostHistory();
   } catch(e) {
     setSyncIcon('⚠️');
     showToast('クラウド失敗。ローカル保存しました', 'error');
+    if (editing) cancelPostEdit(true);
     renderPostHistory();
   }
 }
@@ -2362,13 +2600,14 @@ function previewPost() {
 async function deletePost(id) {
   showConfirm('投稿を削除', 'この投稿を削除しますか？', '削除する', async () => {
     posts = posts.filter(p => p.id !== id);
+    if (editingPostId === id) cancelPostEdit(true);
     saveLocal();
 
     const s = getSettings();
     if (isCloudConfigured(s)) {
       try {
         await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
-          method: 'PUT',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildCloudPayload()),
         });
@@ -2419,6 +2658,7 @@ function selectAnnSched(id) {
 
   renderAnnVsCard(sc);
   renderAnnInfoCard(sc);
+  renderAnnBody(sc);
 
   const catMap = { 'U15':'ジュニアユース','U14':'ジュニアユース','U13':'ジュニアユース',
                    'U12':'ジュニア','U11':'ジュニア','U10':'ジュニア','U9':'ジュニア','U8':'ジュニア' };
@@ -2493,6 +2733,89 @@ function generateAnnBase(sc, extraMsg) {
   text += `— ${s.clubName||'クラブ'}`;
   return text;
 }
+
+// ===== 試合告知の本文の手直し =====
+// 予定（schedule）に保存する：annMode 'custom'＝手直しした本文を使う / 'auto'＝自動作成に戻した / null＝従来どおり
+// （null のときは、投稿履歴で編集済みの告知があればその本文を表示・維持する）
+function annSnap(sc) {
+  return JSON.stringify([sc.date||'', sc.time||'', sc.opponent||'', sc.venue||'', sc.competition||'', sc.category||'']);
+}
+function linkedAnnPost(sc) { return posts.find(p => p.id === `ann_${sc.id}`) || null; }
+function annExtraMsg() { return (document.getElementById('ann-extra-msg')?.value || '').trim(); }
+function currentAnnText(sc) {
+  if (sc.annMode === 'custom' && sc.annCustom != null) return sc.annCustom;
+  if (sc.annMode !== 'auto') {
+    const p = linkedAnnPost(sc);
+    if (p?.edited && p.body) return p.body;
+  }
+  return generateAnnBase(sc, annExtraMsg());
+}
+function isAnnEdited(sc) {
+  if (sc.annMode === 'custom') return true;
+  return sc.annMode !== 'auto' && !!linkedAnnPost(sc)?.edited;
+}
+function renderAnnBody(sc) {
+  sc = sc || schedules.find(s => s.id === selectedAnnSchedId);
+  if (!sc) return;
+  const edited = isAnnEdited(sc);
+  const textEl = document.getElementById('ann-body-text');
+  if (textEl) textEl.textContent = currentAnnText(sc);
+  document.getElementById('ann-body-badge')?.classList.toggle('hidden', !edited);
+  const stale = sc.annMode === 'custom' && sc.annCustomSnap && sc.annCustomSnap !== annSnap(sc);
+  document.getElementById('ann-body-stale')?.classList.toggle('hidden', !stale);
+  const note = document.getElementById('ann-extra-note');
+  if (note) note.textContent = edited
+    ? '本文を手直ししているため、追加メッセージは使われません（「自動作成に戻す」で使われます）'
+    : '空欄でも投稿できます。入力すると下の本文に反映されます';
+  closeAnnBodyEditor();
+}
+function openAnnBodyEditor() {
+  const sc = schedules.find(s => s.id === selectedAnnSchedId);
+  if (!sc) return;
+  const input = document.getElementById('ann-body-input');
+  input.value = currentAnnText(sc);
+  document.getElementById('ann-body-box').classList.add('hidden');
+  document.getElementById('ann-body-editor').classList.remove('hidden');
+  document.getElementById('btn-ann-body-edit').classList.add('hidden');
+  input.focus();
+}
+function closeAnnBodyEditor() {
+  document.getElementById('ann-body-box')?.classList.remove('hidden');
+  document.getElementById('ann-body-editor')?.classList.add('hidden');
+  document.getElementById('btn-ann-body-edit')?.classList.remove('hidden');
+}
+function setAnnCustom(sc, text) {
+  sc.annMode = 'custom';
+  sc.annCustom = text;
+  sc.annCustomSnap = annSnap(sc);
+}
+function saveAnnBodyEdit() {
+  const sc = schedules.find(s => s.id === selectedAnnSchedId);
+  if (!sc) return;
+  const text = document.getElementById('ann-body-input').value.replace(/\s+$/, '');
+  if (!text.trim()) { showToast('本文が空です。元に戻す場合は「自動作成に戻す」を押してください', 'error'); return; }
+  if (text === generateAnnBase(sc, annExtraMsg()).replace(/\s+$/, '')) {
+    sc.annMode = 'auto'; sc.annCustom = null; sc.annCustomSnap = null;
+  } else {
+    setAnnCustom(sc, text);
+  }
+  saveLocal();
+  renderAnnBody(sc);
+  showToast(sc.posted ? '本文を保存しました。「ホームページに告知する」で反映されます' : '本文を保存しました', 'success');
+}
+function resetAnnBody() {
+  const sc = schedules.find(s => s.id === selectedAnnSchedId);
+  if (!sc) return;
+  showConfirm('自動作成に戻す', '手直しした本文を消して、予定の内容から作った本文に戻しますか？', '戻す', () => {
+    sc.annMode = 'auto'; sc.annCustom = null; sc.annCustomSnap = null;
+    saveLocal();
+    renderAnnBody(sc);
+    showToast(sc.posted ? '自動作成に戻しました。「ホームページに告知する」で反映されます' : '自動作成に戻しました', 'success');
+  });
+}
+function escAnnHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
 function showAnnPreview() {
   const sc = schedules.find(s => s.id === selectedAnnSchedId);
   if (!sc) { showToast('試合を選択してください', 'error'); return; }
@@ -2524,12 +2847,16 @@ function showAnnPreview() {
       </div>
     </div>
     <div class="ann-preview-divider"></div>
+    ${isAnnEdited(sc) ? `
+    <div class="ann-preview-body">
+      <p>${escAnnHtml(currentAnnText(sc)).replace(/\n/g,'<br>')}</p>
+    </div>` : `
     <div class="ann-preview-meta">${metaRows.join('')}</div>
     <div class="ann-preview-divider"></div>
     <div class="ann-preview-body">
       <p>${bodyText.replace(/\n/g,'<br>')}</p>
       <p class="ann-preview-sign">— ${s.clubName||'クラブ'}</p>
-    </div>
+    </div>`}
   `;
   openModal('modal-ann-preview');
 }
@@ -2541,7 +2868,9 @@ async function postAnnouncement() {
   const sc = schedules.find(s => s.id === selectedAnnSchedId);
   if (!sc) { showToast('試合を選択してください', 'error'); return; }
   const extraMsg = (document.getElementById('ann-extra-msg')?.value || '').trim();
-  const body = generateAnnBase(sc, extraMsg);
+  // 手直しした本文（この画面 or 投稿履歴で編集済み）を優先し、投稿し直しても上書きしない
+  const edited = isAnnEdited(sc);
+  const body = edited ? currentAnnText(sc) : generateAnnBase(sc, extraMsg);
   const category = document.getElementById('ann-category').value;
 
   const sconf = getSettings();
@@ -2556,6 +2885,7 @@ async function postAnnouncement() {
     source: 'announcement',
     published: true,
   };
+  if (edited) post.edited = true;
 
   const pidx = posts.findIndex(p => p.id === post.id);
   if (pidx >= 0) posts[pidx] = post; else posts.unshift(post);
@@ -2574,7 +2904,7 @@ async function postAnnouncement() {
   setSyncIcon('💾');
   try {
     const res = await fetch(`${getFirebaseUrl(sconf)}.json?auth=${await getAuthParam(sconf)}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildCloudPayload()),
     });
@@ -3244,59 +3574,131 @@ function clearPickedPhoto(target) {
   updatePhotoPreview(target);
 }
 
-// スマホの写真をImgBBへアップロードして使う（自動で縮小してから送る）
-function uploadPhoto(input, target) {
-  const file = input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
+// 写真をImgBBへアップロードして使う（自動で縮小してから送る）
+// 入口は3つ：各写真欄の「写真を選ぶ」ボタン／写真欄へのドラッグ＆ドロップ／画像の貼り付け（Ctrl+V）。
+// どれも uploadPhotoFile に集約する（2026-11-08 グランデから移植）
+
+// 画像を最大1600pxに縮小・JPEG圧縮（通信量と表示速度のため）して base64 を返す
+function shrinkImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode'));
+      img.onload = () => {
+        const MAX = 1600;
+        let w = img.width, h = img.height;
+        if (Math.max(w, h) > MAX) {
+          const ratio = MAX / Math.max(w, h);
+          w = Math.round(w * ratio); h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; // 透過PNGをJPEGにしたとき黒くならないように
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.82).split(',')[1]);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+let _photoUploading = false;
+async function uploadPhotoFile(file, target) {
+  if (!file || !target) return false;
+  if (!/^image\//.test(file.type || '')) { showToast('画像ファイルを選んでください', 'error'); return false; }
   const key = getImgbbKey();
   const nokey = document.getElementById(`${target}-image-nokey`);
-  if (!key) { if (nokey) nokey.style.display = 'block'; return; }
+  if (!key) {
+    if (nokey) nokey.style.display = 'block';
+    showToast('写真のアップロードには、設定ページで ImgBB APIキーの保存が必要です', 'error');
+    return false;
+  }
   if (nokey) nokey.style.display = 'none';
+  if (_photoUploading) { showToast('アップロード中です。少しお待ちください', 'error'); return false; }
+  _photoUploading = true;
 
   const btn = document.getElementById(`${target}-image-btn`);
   const status = document.getElementById(`${target}-image-status`);
+  const zone = document.querySelector(`.photo-drop[data-photo-target="${target}"]`);
   if (btn) btn.style.display = 'none';
   if (status) status.style.display = 'block';
+  zone?.classList.add('is-uploading');
+  try {
+    const base64 = await shrinkImageFile(file);
+    const fd = new FormData();
+    fd.append('image', base64);
+    const res = await fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(key), { method: 'POST', body: fd });
+    const data = await res.json();
+    const url = data && data.data && (data.data.display_url || data.data.url);
+    if (!url) throw new Error('ImgBB error');
+    const urlInput = document.getElementById(`${target}-image`);
+    if (urlInput) urlInput.value = url;
+    updatePhotoPreview(target);
+    showToast('写真をアップロードしました ✓', 'success');
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast(err.message === 'decode' || err.message === 'read'
+      ? '画像を読み込めませんでした'
+      : 'アップロードに失敗しました。電波とAPIキーを確認してください', 'error');
+    return false;
+  } finally {
+    _photoUploading = false;
+    if (btn) btn.style.display = '';
+    if (status) status.style.display = 'none';
+    zone?.classList.remove('is-uploading');
+  }
+}
 
-  // 画像を最大1600pxに縮小・JPEG圧縮（通信量と表示速度のため）
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const MAX = 1600;
-      let w = img.width, h = img.height;
-      if (Math.max(w, h) > MAX) {
-        const ratio = MAX / Math.max(w, h);
-        w = Math.round(w * ratio); h = Math.round(h * ratio);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+// 各写真欄の「写真を選ぶ」ボタン
+function uploadPhoto(input, target) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (file) uploadPhotoFile(file, target);
+}
 
-      const fd = new FormData();
-      fd.append('image', base64);
-      fetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(key), { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(data => {
-          const url = data && data.data && (data.data.display_url || data.data.url);
-          if (!url) throw new Error('ImgBB error');
-          const urlInput = document.getElementById(`${target}-image`);
-          if (urlInput) urlInput.value = url;
-          updatePhotoPreview(target);
-          showToast('写真をアップロードしました ✓', 'success');
-        })
-        .catch(err => { console.error(err); showToast('アップロードに失敗しました。電波とAPIキーを確認してください', 'error'); })
-        .finally(() => { if (btn) btn.style.display = ''; if (status) status.style.display = 'none'; });
-    };
-    img.onerror = () => {
-      showToast('画像を読み込めませんでした', 'error');
-      if (btn) btn.style.display = ''; if (status) status.style.display = 'none';
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+// ドラッグ＆ドロップ／貼り付け（主にパソコン向け）
+function bindPhotoDrop() {
+  const zoneOf = (e) => e.target && e.target.closest ? e.target.closest('.photo-drop') : null;
+  const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+
+  document.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); // 欄の外に落としてもブラウザが画像を開いてページを離れないように
+    const zone = zoneOf(e);
+    document.querySelectorAll('.photo-drop.is-dragover').forEach(z => { if (z !== zone) z.classList.remove('is-dragover'); });
+    if (zone) { zone.classList.add('is-dragover'); e.dataTransfer.dropEffect = 'copy'; }
+    else e.dataTransfer.dropEffect = 'none';
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!e.relatedTarget) document.querySelectorAll('.photo-drop.is-dragover').forEach(z => z.classList.remove('is-dragover'));
+  });
+  document.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    document.querySelectorAll('.photo-drop.is-dragover').forEach(z => z.classList.remove('is-dragover'));
+    const zone = zoneOf(e);
+    if (!zone) return;
+    const file = [...e.dataTransfer.files].find(f => /^image\//.test(f.type));
+    if (!file) { showToast('画像ファイルをドロップしてください', 'error'); return; }
+    uploadPhotoFile(file, zone.dataset.photoTarget);
+  });
+
+  // 画像の貼り付け：いま表示中のページにある写真欄へ入れる（文字の貼り付けには影響しない）
+  document.addEventListener('paste', (e) => {
+    const item = [...((e.clipboardData && e.clipboardData.items) || [])].find(i => i.kind === 'file' && /^image\//.test(i.type));
+    if (!item) return;
+    if (document.querySelector('.modal-overlay.open')) return;
+    const zone = [...document.querySelectorAll('.page.active .photo-drop')].find(z => z.offsetParent !== null);
+    if (!zone) return;
+    e.preventDefault();
+    uploadPhotoFile(item.getAsFile(), zone.dataset.photoTarget);
+  });
 }
 
 // ===== SETTINGS =====
@@ -3470,6 +3872,11 @@ function bindEvents() {
   document.getElementById('btn-save-result')?.addEventListener('click', saveResult);
   document.getElementById('btn-publish-to-hp')?.addEventListener('click', publishToHP);
   document.getElementById('btn-unpublish')?.addEventListener('click', unpublish);
+  document.getElementById('btn-article-edit')?.addEventListener('click', openArticleEditor);
+  document.getElementById('btn-article-save')?.addEventListener('click', saveArticleEdit);
+  document.getElementById('btn-article-cancel')?.addEventListener('click', closeArticleEditor);
+  document.getElementById('btn-article-reset')?.addEventListener('click', resetArticleToAuto);
+  document.getElementById('btn-article-reset-stale')?.addEventListener('click', resetArticleToAuto);
 
   // Players
   document.getElementById('btn-add-player')?.addEventListener('click', () => openPlayerModal());
@@ -3581,6 +3988,16 @@ function bindEvents() {
   document.getElementById('btn-back-announcement')?.addEventListener('click', popPage);
   document.getElementById('btn-ann-preview')?.addEventListener('click', showAnnPreview);
   document.getElementById('btn-ann-post')?.addEventListener('click', postAnnouncement);
+  document.getElementById('btn-ann-edit-sched')?.addEventListener('click', () => { if (selectedAnnSchedId) openScheduleModal(selectedAnnSchedId); });
+  document.getElementById('btn-ann-body-edit')?.addEventListener('click', openAnnBodyEditor);
+  document.getElementById('btn-ann-body-save')?.addEventListener('click', saveAnnBodyEdit);
+  document.getElementById('btn-ann-body-cancel')?.addEventListener('click', closeAnnBodyEditor);
+  document.getElementById('btn-ann-body-reset')?.addEventListener('click', resetAnnBody);
+  document.getElementById('btn-ann-body-reset-stale')?.addEventListener('click', resetAnnBody);
+  document.getElementById('ann-extra-msg')?.addEventListener('input', () => {
+    const sc = schedules.find(s => s.id === selectedAnnSchedId);
+    if (sc && !isAnnEdited(sc)) document.getElementById('ann-body-text').textContent = currentAnnText(sc);
+  });
   document.getElementById('btn-close-ann-preview')?.addEventListener('click', () => closeModal('modal-ann-preview'));
   document.getElementById('btn-ann-modify')?.addEventListener('click', () => closeModal('modal-ann-preview'));
   document.getElementById('btn-ann-preview-post')?.addEventListener('click', confirmAnnPost);
@@ -4697,7 +5114,9 @@ function summarizeGroup(list) {
   list.forEach(m => {
     const my = m.result.myScore, op = m.result.oppScore;
     gf += my; ga += op;
-    if (my > op) win++; else if (my < op) lose++; else draw++;
+    // PK戦で決着した試合は勝敗としてカウントする（引き分け扱いにしない）
+    const outcome = matchOutcomeCode(m.result);
+    if (outcome === 'WIN') win++; else if (outcome === 'LOSS') lose++; else draw++;
   });
   const played = list.length;
   const rate = played ? Math.round((win / played) * 100) : 0;
@@ -4863,6 +5282,7 @@ function initApp() {
 
   loadLocal();
   bindEvents();
+  bindPhotoDrop();
 
   // Apply settings to UI (always from mp-config.js)
   const s = getSettings();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Match Planner — クラブ運営管理</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Oswald:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260831d">
+  <link rel="stylesheet" href="style.css?v=20261108b">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -361,15 +361,31 @@
       <!-- Tab: 結果 (Result) -->
       <div class="tab-pane" id="tab-result">
         <div class="result-section">
-          <!-- 種別 -->
-          <div class="form-group">
-            <label class="form-label">種別</label>
-            <select class="form-select" id="result-type">
-              <option value="公式戦">公式戦</option>
-              <option value="練習試合">練習試合</option>
-              <option value="フェスティバル">フェスティバル</option>
-              <option value="合宿">合宿</option>
-            </select>
+          <!-- 種別・カテゴリー -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">種別</label>
+              <select class="form-select" id="result-type">
+                <option value="公式戦">公式戦</option>
+                <option value="練習試合">練習試合</option>
+                <option value="フェスティバル">フェスティバル</option>
+                <option value="合宿">合宿</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">カテゴリー</label>
+              <select class="form-select" id="result-category">
+                <option value="">指定なし</option>
+                <option value="U15">U15</option>
+                <option value="U14">U14</option>
+                <option value="U13">U13</option>
+                <option value="U12">U12</option>
+                <option value="U11">U11</option>
+                <option value="U10">U10</option>
+                <option value="U9">U9</option>
+                <option value="U8">U8</option>
+              </select>
+            </div>
           </div>
           <!-- スコア -->
           <div class="form-group">
@@ -383,6 +399,25 @@
               <div>
                 <div class="score-team-label">相手</div>
                 <input class="score-num-input" type="number" id="result-opp-score" min="0" max="99" value="0">
+              </div>
+            </div>
+          </div>
+
+          <!-- PK戦 -->
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+              <input type="checkbox" id="result-pk-enabled" onchange="togglePkFields()">
+              PK戦で決着した
+            </label>
+            <div class="score-area" id="result-pk-scores" style="display:none;margin-top:8px">
+              <div>
+                <div class="score-team-label">自チーム(PK)</div>
+                <input class="score-num-input" type="number" id="result-pk-my" min="0" max="99" value="0">
+              </div>
+              <div class="score-sep">-</div>
+              <div>
+                <div class="score-team-label">相手(PK)</div>
+                <input class="score-num-input" type="number" id="result-pk-opp" min="0" max="99" value="0">
               </div>
             </div>
           </div>
@@ -401,7 +436,7 @@
                 <option value="その他">その他</option>
               </select>
             </div>
-            <div class="form-group">
+            <div class="form-group photo-drop" data-photo-target="result">
               <label class="form-label">試合の写真（任意）</label>
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
                 <label class="btn btn-secondary btn-sm" style="cursor:pointer" id="result-image-btn">📷 写真を選ぶ
@@ -416,6 +451,7 @@
               <img id="result-image-preview" style="display:none;width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:6px" alt="">
               <input class="form-input" type="url" id="result-image" placeholder="または画像URLを貼り付け https://..." oninput="updatePhotoPreview('result')">
               <div style="font-size:11.5px;color:var(--c-muted);margin-top:4px">その場で撮った写真をスマホから選べます。ニュース記事・トップページのサムネイルに使われます</div>
+              <div class="photo-drop-hint">💻 パソコンでは、この枠に画像をドラッグ＆ドロップ、または Ctrl＋V で貼り付けできます</div>
             </div>
           </div>
 
@@ -468,8 +504,23 @@
         </div>
         <div class="publish-actions">
           <div id="hp-article-preview" class="preview-box hidden">
-            <div class="preview-label">自動生成記事プレビュー</div>
+            <div class="article-preview-head">
+              <div class="preview-label"><span id="hp-article-label">自動生成記事プレビュー</span> <span id="hp-article-badge" class="article-badge hidden">✏️ 編集済み</span></div>
+              <button type="button" class="btn btn-secondary btn-sm article-edit-btn" id="btn-article-edit">✏️ 記事を編集</button>
+            </div>
+            <div id="hp-article-stale" class="article-stale hidden">
+              <span>試合データ（スコア・得点者など）が変わりました。手直しした文章には反映されていません。</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-article-reset-stale">自動生成に戻す</button>
+            </div>
             <div class="preview-content" id="hp-article-text"></div>
+            <div id="hp-article-editor" class="article-editor hidden">
+              <textarea id="hp-article-input" class="form-textarea article-textarea" rows="14" aria-label="記事の本文"></textarea>
+              <div class="article-edit-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-article-reset">自動生成に戻す</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-article-cancel">キャンセル</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-article-save">保存</button>
+              </div>
+            </div>
           </div>
           <button class="btn btn-primary btn-lg btn-full" id="btn-publish-to-hp">🌐 ホームページに公開する</button>
           <button class="btn btn-secondary btn-sm btn-full" id="btn-unpublish" style="display:none">公開を取り消す</button>
@@ -772,6 +823,10 @@
 
         <!-- 投稿作成 -->
         <div class="post-pane active" id="post-pane-compose">
+          <div class="post-edit-banner hidden" id="post-edit-banner">
+            <span id="post-edit-banner-text"></span>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="cancelPostEdit()">編集をやめる</button>
+          </div>
           <div class="form-group">
             <div class="form-label">投稿タイプ</div>
             <div class="post-type-row" id="post-type-row">
@@ -808,7 +863,7 @@
             <label class="form-label">本文</label>
             <textarea class="form-textarea" id="post-body" rows="6" placeholder="本文を入力してください" style="min-height:120px"></textarea>
           </div>
-          <div class="form-group">
+          <div class="form-group photo-drop" data-photo-target="post">
             <label class="form-label">写真（任意）</label>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
               <label class="btn btn-secondary btn-sm" style="cursor:pointer" id="post-image-btn">📷 写真を選ぶ
@@ -823,6 +878,7 @@
             <img id="post-image-preview" style="display:none;width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:6px" alt="">
             <input class="form-input" type="url" id="post-image" placeholder="または画像URLを貼り付け https://..." oninput="updatePhotoPreview('post')">
             <div style="font-size:11.5px;color:var(--c-muted);margin-top:4px">その場で撮った写真をスマホから選べます</div>
+            <div class="photo-drop-hint">💻 パソコンでは、この枠に画像をドラッグ＆ドロップ、または Ctrl＋V で貼り付けできます</div>
           </div>
           <div class="toggle-row">
             <div class="toggle-info">
@@ -877,6 +933,7 @@
           <div id="ann-vs-card"></div>
           <!-- 試合情報カード -->
           <div id="ann-info-card"></div>
+          <button type="button" class="btn btn-secondary btn-sm ann-edit-sched-btn" id="btn-ann-edit-sched">✏️ 予定（日時・会場・相手）を編集</button>
 
           <!-- SNS告知画像 -->
           <div id="ann-sns-slot"></div>
@@ -888,7 +945,28 @@
             <label class="form-label">追加メッセージ（任意）</label>
             <textarea class="form-textarea" id="ann-extra-msg" rows="3"
               placeholder="例: 保護者の皆様の応援をお待ちしております。" style="min-height:80px"></textarea>
-            <div style="font-size:12px;color:var(--c-muted);margin-top:4px">空欄でも投稿できます</div>
+            <div style="font-size:12px;color:var(--c-muted);margin-top:4px" id="ann-extra-note">空欄でも投稿できます</div>
+          </div>
+
+          <!-- ③.5 投稿される本文（手直しできる） -->
+          <div class="form-group">
+            <div class="article-preview-head">
+              <div class="form-label" style="margin-bottom:0"><span>投稿される本文</span> <span id="ann-body-badge" class="article-badge hidden">✏️ 編集済み</span></div>
+              <button type="button" class="btn btn-secondary btn-sm article-edit-btn" id="btn-ann-body-edit">✏️ 本文を編集</button>
+            </div>
+            <div id="ann-body-stale" class="article-stale hidden">
+              <span>予定（日時・会場・相手など）が変わりました。手直しした本文には反映されていません。</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-ann-body-reset-stale">自動作成に戻す</button>
+            </div>
+            <div class="preview-box" id="ann-body-box"><div class="preview-content" id="ann-body-text"></div></div>
+            <div id="ann-body-editor" class="article-editor hidden">
+              <textarea id="ann-body-input" class="form-textarea article-textarea" rows="12" aria-label="告知の本文"></textarea>
+              <div class="article-edit-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-ann-body-reset">自動作成に戻す</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-ann-body-cancel">キャンセル</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-ann-body-save">保存</button>
+              </div>
+            </div>
           </div>
 
           <!-- ④ カテゴリー -->
@@ -1306,6 +1384,7 @@
               <option value="U10">U10</option>
               <option value="U9">U9</option>
               <option value="U8">U8</option>
+              <option value="staff">スタッフ</option>
             </select>
           </div>
         </div>
@@ -1608,6 +1687,6 @@
 
 </div><!-- /#app -->
 <script src="mp-config.js?v=20260831d"></script>
-<script src="script.js?v=20260831d"></script>
+<script src="script.js?v=20261108b"></script>
 </body>
 </html>

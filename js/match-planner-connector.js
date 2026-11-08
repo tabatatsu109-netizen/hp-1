@@ -354,6 +354,8 @@ const AuroraConnector = (function () {
           '<span class="score-sep">-</span>' +
           '<span class="score-num">' + m.result.oppScore + '</span>' +
         '</span>' +
+        ((m.result.pk && m.result.pk.my != null && m.result.pk.opp != null)
+          ? '<span style="font-size:11px;color:#888;margin-left:4px">(PK ' + m.result.pk.my + '-' + m.result.pk.opp + ')</span>' : '') +
         '<span class="result-opp">' + escapeHTML(m.opponent || '') + '</span>' +
         '<span class="result-badge ' + rc + '">' + rl + '</span>' +
         '</div>';

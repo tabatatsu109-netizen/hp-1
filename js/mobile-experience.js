@@ -199,8 +199,9 @@
   function renderMdayResult(host, m) {
     moveAboveHero(host);
     var r = m.result;
-    var win = r.myScore > r.oppScore;
-    var lose = r.myScore < r.oppScore;
+    // PK戦で決着した試合はPlannerが付けた勝敗（resultStr）を優先する
+    var win = r.resultStr ? r.resultStr === '勝利' : r.myScore > r.oppScore;
+    var lose = r.resultStr ? r.resultStr === '敗戦' : r.myScore < r.oppScore;
     var label = win ? 'WIN!' : lose ? 'FULL TIME' : 'DRAW';
     host.innerHTML = mdayShell('mday--result' + (win ? ' mday--win' : ''),
       '<div class="mday-head"><span class="mday-flag">TODAY</span><span class="mday-title">' + label + '</span></div>' +
@@ -209,6 +210,7 @@
         '<span class="mday-score">' + r.myScore + '<i>-</i>' + r.oppScore + '</span>' +
         '<span class="mday-team">' + esc(m.opponent || '') + '</span>' +
       '</div>' +
+      ((r.pk && r.pk.my != null && r.pk.opp != null) ? '<div class="mday-comp">PK戦 ' + r.pk.my + ' - ' + r.pk.opp + '</div>' : '') +
       '<div class="mday-comp">応援ありがとうございました！</div>'
     );
     host.style.display = 'block';

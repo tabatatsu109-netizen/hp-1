@@ -632,7 +632,8 @@ function renderDashboard() {
   document.getElementById('header-club-name').textContent = s.clubName || 'クラブ名未設定';
 
   // HP card stats
-  const nextSched = schedules.filter(s => s.type === '試合' && s.date >= today).sort((a,b) => (a.date+a.time) < (b.date+b.time) ? -1 : 1)[0];
+  // 試合告知の画面と同じく「試合」「大会」の両方を次の試合として扱う（2026-11-13）
+  const nextSched = schedules.filter(s => (s.type === '試合' || s.type === '大会') && s.date >= today).sort((a,b) => (a.date+a.time) < (b.date+b.time) ? -1 : 1)[0];
   document.getElementById('dash-ann-stat').textContent = nextSched ? `次の試合: ${fmtDate(nextSched.date)}` : '試合予定なし';
 
   const pendingResults = matches.filter(m => !m.result?.grandePosted && m.date <= today).length;

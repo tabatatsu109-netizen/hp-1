@@ -771,8 +771,8 @@ function renderSchedCard(sc, today) {
           ${sc.posted ? '<span class="posted-pill">告知済み</span>' : ''}
           ${resultPosted ? '<span class="posted-pill">結果公開済み</span>' : ''}
           ${!isPast && isMatchLike ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();startAnnouncement('${sc.id}')">📢 告知</button><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openSnsFromSchedId('${sc.id}')">📸 SNS画像</button>` : ''}
-          ${isPast && isMatchLike && !resultPosted ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">🏆 結果を登録</button>` : ''}
-          ${isPast && isMatchLike && resultPosted ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">✏️ 結果を編集</button>` : ''}
+          ${isMatchLike && !resultPosted ? `<button class="btn ${isPast ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">🏆 結果を登録</button>` : ''}
+          ${isMatchLike && resultPosted ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();continueResultFromSchedule('${sc.id}')">✏️ 結果を編集</button>` : ''}
           <button class="btn btn-ghost btn-sm" style="color:var(--c-red);font-size:12px" onclick="event.stopPropagation();deleteSchedule('${sc.id}')">削除</button>
         </div>
       </div>

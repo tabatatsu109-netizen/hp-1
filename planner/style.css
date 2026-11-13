@@ -1108,3 +1108,8 @@ img { max-width: 100%; display: block; }
 @media (hover: hover) and (pointer: fine) {
   .photo-drop-hint { display: block; }
 }
+
+/* ===== v4.7: 試合の削除ボタン（2026-11-13 グランデから移植） ===== */
+.match-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.btn-delete-match { color: var(--c-red, #dc2626); white-space: nowrap; min-height: 44px; }
+#confirm-msg { white-space: pre-line; }

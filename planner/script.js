@@ -1746,6 +1746,45 @@ async function unpublish() {
   }
 }
 
+// 個別の試合を削除（2026-11-13 グランデから移植）
+// 公開済みならニュース記事も一緒に消し、紐づくスケジュールは残して連携だけ外す（予定に「結果を登録」が戻る）
+async function deleteCurrentMatch() {
+  if (!currentMatch) return;
+  const m = currentMatch;
+  const label = m.opponent ? `vs ${m.opponent}（${fmtDateFull(m.date)}）` : fmtDateFull(m.date);
+  showConfirm('試合を削除', `${label} の試合記録を削除します。\n布陣・結果・ホームページの試合結果とニュース記事もすべて消えます。\nスケジュールの予定自体は残ります。\nこの操作は取り消せません。よろしいですか？`, '削除する', async () => {
+    const postIds = new Set([m.result?.grandeNewsId, `match_${m.id}`].filter(Boolean));
+    posts = posts.filter(p => !postIds.has(p.id));
+    schedules.forEach(sc => { if (sc.matchId === m.id) { sc.matchId = null; sc.posted = false; } });
+    matches = matches.filter(x => x.id !== m.id);
+    currentMatch = null;
+    // リセット印を更新 → 他の端末に古いデータが残っていても、消した試合が復活しないようにする
+    setResetStamp(Date.now());
+    saveLocal();
+
+    // ホームページにすぐ反映（未ログインなら端末内の削除のみ）
+    const s = getSettings();
+    if (isCloudConfigured(s)) {
+      clearTimeout(_cloudSaveTimer);
+      setSyncIcon('💾');
+      try {
+        const res = await fetch(`${getFirebaseUrl(s)}.json?auth=${await getAuthParam(s)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildCloudPayload()),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setSyncIcon('☁️');
+      } catch(e) {
+        setSyncIcon('⚠️');
+        showToast('クラウドへの反映に失敗しました: ' + e.message, 'error');
+      }
+    }
+    showToast('試合を削除しました', 'success');
+    popPage();
+  });
+}
+
 // ===== PLAYERS =====
 function renderPlayers() {
   // Build filter chips

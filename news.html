@@ -153,6 +153,20 @@
     <a href="join.html#apply" class="fb-trial">体験申込</a>
   </div>
 
+  <!-- お知らせ 詳細モーダル（トップページと同じ部品） -->
+  <div class="nd-overlay" id="news-detail-overlay" role="dialog" aria-modal="true" aria-labelledby="news-detail-title">
+    <div class="nd-box">
+      <button class="nd-close" id="news-detail-close" aria-label="閉じる">✕</button>
+      <div class="nd-meta">
+        <span class="nd-tag" id="news-detail-tag"></span>
+        <span class="nd-date" id="news-detail-date"></span>
+      </div>
+      <h3 class="nd-title" id="news-detail-title"></h3>
+      <img class="nd-image" id="news-detail-image" alt="">
+      <p class="nd-body" id="news-detail-body"></p>
+    </div>
+  </div>
+
   <script src="js/config-loader.js?v=20261022a"></script>
   <script src="js/mobile-experience.js?v=20261108"></script>
   <script>
@@ -183,7 +197,7 @@
     function filteredNews(){
       if(activeCat === 'all') return allNews;
       return allNews.filter(function(n){
-        var cat = n.cat || n.category || n.type || '';
+        var cat = [n.cat, n.category, n.type].filter(Boolean).join(' ');
         if(activeCat === 'その他') return !/試合|結果|スクール|体験|クラブ/i.test(cat);
         return cat.indexOf(activeCat) !== -1 || (activeCat==='試合' && /結果/.test(cat)) || (activeCat==='スクール' && /体験/.test(cat));
       });
@@ -236,7 +250,7 @@
       box.innerHTML = picks.map(function(n, i){
         var cat = n.cat || n.category || n.type || 'お知らせ';
         var cc = catColor(cat);
-        return '<a class="pn-card" href="#news-list">' +
+        return '<a class="pn-card" href="#" data-news-id="' + esc(n.id || '') + '" data-news-idx="' + allNews.indexOf(n) + '">' +
           thumbOf(n, i) +
           '<div class="pn-body">' +
             '<div class="pn-meta"><span class="pn-date">' + esc(formatDate(n.date)) + '</span>' +
@@ -254,15 +268,40 @@
       el.innerHTML = list.slice(0, shown).map(function(n){
         var cat = n.cat || n.category || n.type || 'お知らせ';
         var cc = catColor(cat);
-        return '<div class="news-row">' +
+        return '<a class="news-row" href="#" data-news-idx="' + allNews.indexOf(n) + '">' +
           '<span class="news-date">' + esc(formatDate(n.date)) + '</span>' +
           '<span class="news-tag" style="color:' + cc + ';border-color:' + cc + ';justify-self:start;">' + esc(cat) + '</span>' +
           '<span class="news-title">' + esc(n.title) + '</span>' +
           '<span class="news-arrow">›</span>' +
-          '</div>';
+          '</a>';
       }).join('');
       moreBtn.style.display = list.length > shown ? '' : 'none';
     }
+
+    // ── 詳細モーダル ──
+    function openNews(idx){
+      var n = allNews[idx];
+      if(!n) return;
+      document.getElementById('news-detail-tag').textContent = n.cat || n.category || n.type || 'お知らせ';
+      document.getElementById('news-detail-date').textContent = formatDate(n.date);
+      document.getElementById('news-detail-title').textContent = n.title || '';
+      document.getElementById('news-detail-body').textContent = n.body || '';
+      var img = document.getElementById('news-detail-image');
+      if(n.image){ img.src = n.image; img.alt = n.title || ''; img.classList.add('show'); }
+      else { img.removeAttribute('src'); img.classList.remove('show'); }
+      document.getElementById('news-detail-overlay').classList.add('open');
+      document.getElementById('news-detail-close').focus();
+    }
+    function closeNews(){ document.getElementById('news-detail-overlay').classList.remove('open'); }
+    document.addEventListener('click', function(e){
+      var a = e.target.closest && e.target.closest('[data-news-idx]');
+      if(!a) return;
+      e.preventDefault();
+      openNews(+a.getAttribute('data-news-idx'));
+    });
+    document.getElementById('news-detail-close').addEventListener('click', closeNews);
+    document.getElementById('news-detail-overlay').addEventListener('click', function(e){ if(e.target === this) closeNews(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeNews(); });
 
     document.getElementById('more-btn').addEventListener('click', function(){ shown += 10; renderList(); });
     document.querySelectorAll('#news-filter .filter-btn').forEach(function(btn){

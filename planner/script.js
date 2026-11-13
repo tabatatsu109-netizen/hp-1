@@ -853,11 +853,21 @@ function saveScheduleForm() {
   editingSchedId = null;
 }
 function deleteSchedule(id) {
-  showConfirm('スケジュールを削除', 'この予定を削除しますか？', '削除する', () => {
+  // 投稿済みの試合告知（ann_予定ID）があれば一緒に消す（2026-11-13）
+  const annId = `ann_${id}`;
+  const hasAnn = posts.some(p => p.id === annId);
+  const msg = hasAnn
+    ? 'この予定を削除しますか？\nホームページに出している試合告知も一緒に消えます。\n（試合の結果・記録は消えません）'
+    : 'この予定を削除しますか？';
+  showConfirm('スケジュールを削除', msg, '削除する', () => {
     schedules = schedules.filter(s => s.id !== id);
+    if (hasAnn) posts = posts.filter(p => p.id !== annId);
+    if (selectedAnnSchedId === id) selectedAnnSchedId = null;
+    // 消した告知が他の端末から復活しないよう、リセット印も更新する
+    if (hasAnn) setResetStamp(Date.now());
     saveLocal();
     renderSchedule();
-    showToast('削除しました');
+    showToast(hasAnn ? '予定と試合告知を削除しました' : '削除しました');
   });
 }
 

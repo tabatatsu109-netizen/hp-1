@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/alaserio.css?v=20260908">
+  <link rel="stylesheet" href="css/alaserio.css?v=20261113">
 </head>
 <body>
 
@@ -150,6 +150,20 @@
     <a href="join.html#apply" class="fb-trial">体験申込</a>
   </div>
 
+  <!-- 試合結果 詳細モーダル（トップ・お知らせと同じ部品） -->
+  <div class="nd-overlay" id="news-detail-overlay" role="dialog" aria-modal="true" aria-labelledby="news-detail-title">
+    <div class="nd-box">
+      <button class="nd-close" id="news-detail-close" aria-label="閉じる">✕</button>
+      <div class="nd-meta">
+        <span class="nd-tag" id="news-detail-tag"></span>
+        <span class="nd-date" id="news-detail-date"></span>
+      </div>
+      <h3 class="nd-title" id="news-detail-title"></h3>
+      <img class="nd-image" id="news-detail-image" alt="">
+      <p class="nd-body" id="news-detail-body"></p>
+    </div>
+  </div>
+
   <script src="js/config-loader.js?v=20261022a"></script>
   <script src="js/mobile-experience.js?v=20261108"></script>
   <script>
@@ -164,7 +178,7 @@
     function resultClass(rs){ if(!rs) return 'badge-draw'; if(/勝|win/i.test(rs)) return 'badge-win'; if(/負|敗|lose/i.test(rs)) return 'badge-lose'; return 'badge-draw'; }
     function resultLetter(rs){ if(!rs) return 'D'; if(/勝|win/i.test(rs)) return 'W'; if(/負|敗|lose/i.test(rs)) return 'L'; return 'D'; }
 
-    var state = { config: null, allMatches: [], allSchedules: [], categories: [], activeCategory: '' };
+    var state = { config: null, allMatches: [], allSchedules: [], allPosts: [], visibleResults: [], categories: [], activeCategory: '' };
 
     // カテゴリー表記ゆれ吸収 ("U15" と "U-15" を同一視)
     function normCat(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -185,7 +199,7 @@
 
     function getMatchCategory(m){
       if(m.category) return m.category;
-      var name = (m.competitionName || '').toLowerCase();
+      var name = (m.competition || m.competitionName || '').toLowerCase();
       if(name.includes('u-15') || name.includes('u15')) return 'U-15';
       if(name.includes('u-13') || name.includes('u13')) return 'U-13';
       if(name.includes('u-12') || name.includes('u12')) return 'U-12';
@@ -309,13 +323,14 @@
       // 大会名ごとにグループ化
       var groups = {}, order = [];
       matches.forEach(function(m){
-        var rawKey = m.competitionName || m.type || 'その他の試合';
+        var rawKey = m.competition || m.competitionName || m.type || 'その他の試合';
         // 前後の空白違いだけで別グループになるのを防ぐ（例: " 北関東大会" と "北関東大会"）
         var key = (typeof rawKey === 'string' ? rawKey.trim() : rawKey) || 'その他の試合';
         if(!groups[key]){ groups[key] = []; order.push(key); }
         groups[key].push(m);
       });
 
+      state.visibleResults = [];
       el.innerHTML = order.map(function(key){
         var rows = groups[key].map(function(m){
           var dateDisp = m.date ? m.date.slice(5).replace('-','.') : '';
@@ -329,14 +344,20 @@
           } else {
             right = '<span class="sched-time">' + esc(m.time || m.kickoff || 'KICK OFF 未定') + '</span>';
           }
-          return '<div class="sched-row">' +
+          var open = '<div class="sched-row">', close = '</div>';
+          if(hasResult){
+            state.visibleResults.push(m);
+            open = '<a class="sched-row sched-row--link" href="#" data-match-idx="' + (state.visibleResults.length - 1) + '" aria-label="vs ' + esc(m.opponent || '') + ' の試合詳細">';
+            close = '</a>';
+          }
+          return open +
             '<div class="sched-date">' + esc(dateDisp) + '<small>' + esc(dayLabel(m.date)) + '</small></div>' +
             '<div class="sched-main">' +
               '<div class="sched-opp">vs ' + esc(m.opponent || '未定') + '</div>' +
               '<div class="sched-venue">' + esc(m.venue || '') + '</div>' +
             '</div>' +
             '<div class="sched-right">' + right + '</div>' +
-            '</div>';
+            close;
         }).join('');
         return '<div class="sched-group">' +
           '<div class="sched-comp-title">' + esc(key) + '</div>' +
@@ -344,6 +365,70 @@
           '</div>';
       }).join('');
     }
+
+    // ── 試合結果の詳細 ──
+    // Planner が作ったニュース記事（試合結果）を探す
+    function findLinkedPost(m){
+      var r = m.result || {};
+      var found = null;
+      if(r.grandeNewsId) found = state.allPosts.filter(function(p){ return p && p.id === r.grandeNewsId; })[0];
+      if(!found) found = state.allPosts.filter(function(p){ return p && p.id === 'match_' + m.id; })[0];
+      if(!found && m.opponent){
+        found = state.allPosts.filter(function(p){
+          return p && p.type === '試合結果' && p.date === m.date && String(p.title||'').indexOf(m.opponent) >= 0;
+        })[0];
+      }
+      return found || null;
+    }
+    function openMatch(idx){
+      var m = state.visibleResults[idx];
+      if(!m || !m.result) return;
+      var r = m.result, post = findLinkedPost(m);
+      var rl = resultLetter(r.resultStr);
+      var label = rl === 'W' ? 'WIN' : rl === 'L' ? 'LOSE' : 'DRAW';
+      var color = rl === 'W' ? '#1f8a4c' : rl === 'L' ? '#d24b52' : '#86868f';
+      var tag = document.getElementById('news-detail-tag');
+      tag.textContent = label; tag.style.color = color; tag.style.borderColor = color;
+      document.getElementById('news-detail-date').textContent = String(m.date || '').replace(/-/g, '.');
+      var clubName = (state.config && state.config.club && (state.config.club.shortName || state.config.club.name)) || 'ALASERIO';
+      var pk = (r.pk && r.pk.my != null && r.pk.opp != null) ? '（PK ' + r.pk.my + '-' + r.pk.opp + '）' : '';
+      document.getElementById('news-detail-title').textContent = clubName + ' ' + r.myScore + ' - ' + r.oppScore + pk + ' ' + (m.opponent || '');
+
+      var lines = [];
+      var comp = m.competition || m.competitionName || m.type || '';
+      if(comp) lines.push('🏆 ' + comp);
+      if(m.category) lines.push('👥 ' + m.category);
+      if(m.venue) lines.push('📍 ' + m.venue);
+      if(r.format) lines.push('⏱ ' + r.format);
+      var goals = Array.isArray(r.goals) ? r.goals.filter(function(g){ return g && g.scorer; }) : [];
+      if(goals.length){
+        lines.push('');
+        lines.push('⚽ 得点');
+        goals.forEach(function(g){
+          lines.push((g.minute ? g.minute + '分　' : '') + g.scorer + (g.assist ? '（アシスト：' + g.assist + '）' : ''));
+        });
+      }
+      var body = lines.join('\n');
+      if(post && post.body) body += (body ? '\n\n' : '') + post.body;
+      document.getElementById('news-detail-body').textContent = body;
+
+      var img = document.getElementById('news-detail-image');
+      var src = r.imageUrl || (post && post.image) || '';
+      if(src){ img.src = src; img.alt = 'vs ' + (m.opponent || '') + ' の試合写真'; img.classList.add('show'); }
+      else { img.removeAttribute('src'); img.classList.remove('show'); }
+      document.getElementById('news-detail-overlay').classList.add('open');
+      document.getElementById('news-detail-close').focus();
+    }
+    function closeMatch(){ document.getElementById('news-detail-overlay').classList.remove('open'); }
+    document.addEventListener('click', function(e){
+      var a = e.target.closest && e.target.closest('[data-match-idx]');
+      if(!a) return;
+      e.preventDefault();
+      openMatch(+a.getAttribute('data-match-idx'));
+    });
+    document.getElementById('news-detail-close').addEventListener('click', closeMatch);
+    document.getElementById('news-detail-overlay').addEventListener('click', function(e){ if(e.target === this) closeMatch(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMatch(); });
 
     ConfigLoader.apply({
       pageTitle: '試合日程・結果',
@@ -354,10 +439,11 @@
         renderTabs();
 
         // Firebase（最新版 Match Planner の保存先）から取得
-        ConfigLoader.fetchClubNodes(c, ['matches', 'schedules'])
+        ConfigLoader.fetchClubNodes(c, ['matches', 'schedules', 'posts'])
           .then(function(data){
             state.allMatches = Array.isArray(data && data.matches) ? data.matches : [];
             state.allSchedules = Array.isArray(data && data.schedules) ? data.schedules : [];
+            state.allPosts = Array.isArray(data && data.posts) ? data.posts : [];
             renderUpcoming(); renderGroups(); renderScorers();
           })
           .catch(function(){ renderUpcoming(); renderGroups(); renderScorers(); });
